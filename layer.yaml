@@ -1,0 +1,5 @@
+includes:
+  - 'interface:etcd'
+  - 'interface:kubernetes-cni'
+  - 'layer:docker'
+  - 'layer:basic'

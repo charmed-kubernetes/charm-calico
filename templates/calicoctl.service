@@ -1,0 +1,18 @@
+[Unit]
+Description=calicoctl node
+After=docker.service
+Requires=docker.service
+
+[Service]
+User=root
+Environment=ETCD_ENDPOINTS={{ connection_string }}
+Environment=ETCD_CA_CERT_FILE={{ etcd_ca_path }}
+Environment=ETCD_CERT_FILE={{ etcd_cert_path }}
+Environment=ETCD_KEY_FILE={{ etcd_key_path }}
+PermissionsStartOnly=true
+ExecStart=/opt/calicoctl/calicoctl node --detach=false
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,22 @@
+name: calico-cni
+summary: Calico CNI
+maintainers:
+  - Rye Terrell <rye.terrell@canonical.com>
+description: |
+  Calico CNI
+tags:
+  - networking
+subordinate: true
+series:
+  - xenial
+requires:
+  etcd:
+    interface: etcd
+  cni:
+    interface: kubernetes-cni
+    scope: container
+resources:
+  calico-cni:
+    type: file
+    filename: calico-cni.tar.gz
+    description: 'Calico CNI resource tarball.'
