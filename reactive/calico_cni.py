@@ -114,7 +114,7 @@ def install_calico_cni_conf(etcd, cni):
 @when_not('calico-cni.npc.deployed')
 def deploy_network_policy_controller(etcd, cni):
     ''' Deploy the Calico network policy controller. '''
-    status_set('Deploying network policy controller.')
+    status_set('maintenance', 'Deploying network policy controller.')
     context = {'connection_string': etcd.get_connection_string()}
     render('policy-controller.yaml', '/tmp/policy-controller.yaml', context)
     cmd = ['kubectl',
