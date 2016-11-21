@@ -103,6 +103,9 @@ def install_calico_cni_conf(etcd, cni):
     cni_config = cni.get_config()
     context = {
         'connection_string': etcd.get_connection_string(),
+        'etcd_key_path': ETCD_KEY_PATH,
+        'etcd_cert_path': ETCD_CERT_PATH,
+        'etcd_ca_path': ETCD_CA_PATH,
         'kubeconfig_path': cni_config['kubeconfig_path']
     }
     render('10-calico.conf', '/etc/cni/net.d/10-calico.conf', context)
