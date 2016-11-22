@@ -10,7 +10,7 @@ Environment=ETCD_CA_CERT_FILE={{ etcd_ca_path }}
 Environment=ETCD_CERT_FILE={{ etcd_cert_path }}
 Environment=ETCD_KEY_FILE={{ etcd_key_path }}
 PermissionsStartOnly=true
-ExecStart=/opt/calicoctl/calicoctl node --detach=false
+ExecStart=/opt/calicoctl/calicoctl node --detach=false --ip {{ ip }}
 Restart=always
 RestartSec=10
 
