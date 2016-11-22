@@ -96,6 +96,22 @@ def start_calicoctl_service():
     set_state('calico-cni.calicoctl.service.started')
 
 
+@when('calico-cni.apps.installed', 'etcd.available',
+      'calico-cni.etcd.credentials.installed')
+@when_not('calico-cni.calicoctl.pool.configured')
+def configure_calicoctl_pool(etcd):
+    ''' Configure calicoctl pool. '''
+    status_set('maintenance', 'Configuring calicoctl pool')
+    env = os.environ.copy()
+    env['ETCD_ENDPOINTS'] = etcd.get_connection_string()
+    env['ETCD_KEY_FILE'] = ETCD_KEY_PATH
+    env['ETCD_CERT_FILE'] = ETCD_CERT_PATH
+    env['ETCD_CA_CERT_FILE'] = ETCD_CA_PATH
+    cmd = '/opt/calicoctl/calicoctl pool add 192.168.0.0/16 --nat-outgoing'
+    check_call(cmd.split(), env=env)
+    set_state('calico-cni.calicoctl.pool.configured')
+
+
 @when('etcd.available', 'cni.is-worker')
 @when_not('calico-cni.conf.installed')
 def install_calico_cni_conf(etcd, cni):
