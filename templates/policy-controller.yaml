@@ -48,3 +48,11 @@ spec:
             # This removes the need for KubeDNS to resolve the Service.
             - name: CONFIGURE_ETC_HOSTS
               value: "true"
+          volumeMounts:
+            # Mount for ETCD key/cert files
+            - name: calicoctl
+              mountPath: /opt/calicoctl
+      volumes:
+        - name: calicoctl
+          hostPath:
+            path: /opt/calicoctl
