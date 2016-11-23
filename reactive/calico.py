@@ -14,8 +14,8 @@ ETCD_KEY_PATH = os.path.join(CALICOCTL_PATH, 'etcd-key')
 ETCD_CERT_PATH = os.path.join(CALICOCTL_PATH, 'etcd-cert')
 ETCD_CA_PATH = os.path.join(CALICOCTL_PATH, 'etcd-ca')
 
-@when_not('calico.apps.installed')
-def install_calico():
+@when_not('calico.binaries.installed')
+def install_calico_binaries():
     ''' Unpack the Calico binaries. '''
     try:
         archive = resource_get('calico')
@@ -59,24 +59,24 @@ def install_calico():
         install = ['install', '-v', '-D', unpacked, app_path]
         check_call(install)
 
-    set_state('calico.apps.installed')
+    set_state('calico.binaries.installed')
 
 
 @when('etcd.tls.available')
-@when_not('calico.etcd.credentials.installed')
+@when_not('calico.etcd-credentials.installed')
 def install_etcd_credentials(etcd):
     etcd.save_client_credentials(ETCD_KEY_PATH, ETCD_CERT_PATH, ETCD_CA_PATH)
-    set_state('calico.etcd.credentials.installed')
+    set_state('calico.etcd-credentials.installed')
 
 
-@when('calico.apps.installed', 'etcd.available',
-      'calico.etcd.credentials.installed')
-@when_not('calico.calicoctl.service.installed')
-def install_calicoctl_service(etcd):
-    ''' Install the calicoctl systemd service. '''
-    status_set('maintenance', 'Installing calicoctl service.')
-    service_path = os.path.join(os.sep, 'lib', 'systemd', 'system', 'calicoctl.service')
-    render('calicoctl.service', service_path, {
+@when('calico.binaries.installed', 'etcd.available',
+      'calico.etcd-credentials.installed')
+@when_not('calico.service.installed')
+def install_calico_service(etcd):
+    ''' Install the calico-node systemd service. '''
+    status_set('maintenance', 'Installing calico-node service.')
+    service_path = os.path.join(os.sep, 'lib', 'systemd', 'system', 'calico-node.service')
+    render('calico-node.service', service_path, {
         'connection_string': etcd.get_connection_string(),
         'etcd_key_path': ETCD_KEY_PATH,
         'etcd_ca_path': ETCD_CA_PATH,
@@ -84,24 +84,24 @@ def install_calicoctl_service(etcd):
         # specify IP so calico doesn't grab a silly one from, say, lxdbr0
         'ip': unit_public_ip()
     })
-    set_state('calico.calicoctl.service.installed')
+    set_state('calico.service.installed')
 
 
-@when('calico.calicoctl.service.installed', 'docker.available')
-@when_not('calico.calicoctl.service.started')
-def start_calicoctl_service():
-    ''' Start the calicoctl systemd service. '''
-    status_set('maintenance', 'Starting calicoctl service.')
-    service_start('calicoctl')
-    set_state('calico.calicoctl.service.started')
+@when('calico.service.installed', 'docker.available')
+@when_not('calico.service.started')
+def start_calico_service():
+    ''' Start the calico systemd service. '''
+    status_set('maintenance', 'Starting calico-node service.')
+    service_start('calico-node')
+    set_state('calico.service.started')
 
 
-@when('calico.apps.installed', 'etcd.available',
-      'calico.etcd.credentials.installed')
-@when_not('calico.calicoctl.pool.configured')
-def configure_calicoctl_pool(etcd):
-    ''' Configure calicoctl pool. '''
-    status_set('maintenance', 'Configuring calicoctl pool')
+@when('calico.binaries.installed', 'etcd.available',
+      'calico.etcd-credentials.installed')
+@when_not('calico.pool.configured')
+def configure_calico_pool(etcd):
+    ''' Configure calico IP pool. '''
+    status_set('maintenance', 'Configuring calico IP pool')
     env = os.environ.copy()
     env['ETCD_ENDPOINTS'] = etcd.get_connection_string()
     env['ETCD_KEY_FILE'] = ETCD_KEY_PATH
@@ -109,12 +109,12 @@ def configure_calicoctl_pool(etcd):
     env['ETCD_CA_CERT_FILE'] = ETCD_CA_PATH
     cmd = '/opt/calicoctl/calicoctl pool add 192.168.0.0/16 --nat-outgoing'
     check_call(cmd.split(), env=env)
-    set_state('calico.calicoctl.pool.configured')
+    set_state('calico.pool.configured')
 
 
 @when('etcd.available', 'cni.is-worker')
-@when_not('calico.conf.installed')
-def install_calico_cni_conf(etcd, cni):
+@when_not('calico.cni.configured')
+def configure_cni(etcd, cni):
     ''' Configure Calico CNI. '''
     status_set('maintenance', 'Configuring Calico CNI')
     os.makedirs('/etc/cni/net.d', exist_ok=True)
@@ -127,11 +127,11 @@ def install_calico_cni_conf(etcd, cni):
         'kubeconfig_path': cni_config['kubeconfig_path']
     }
     render('10-calico.conf', '/etc/cni/net.d/10-calico.conf', context)
-    set_state('calico.conf.installed')
+    set_state('calico.cni.configured')
 
 
-@when('etcd.available', 'calico.conf.installed',
-      'calico.calicoctl.service.started', 'cni.is-worker')
+@when('etcd.available', 'calico.cni.configured',
+      'calico.service.started', 'cni.is-worker')
 @when_not('calico.npc.deployed')
 def deploy_network_policy_controller(etcd, cni):
     ''' Deploy the Calico network policy controller. '''
