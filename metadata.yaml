@@ -1,9 +1,9 @@
-name: calico-cni
-summary: Calico CNI
+name: calico
+summary: Calico subordinate char
 maintainers:
   - Rye Terrell <rye.terrell@canonical.com>
 description: |
-  Calico CNI
+  Calico subordinate charm
 tags:
   - networking
 subordinate: true
@@ -16,7 +16,7 @@ requires:
     interface: kubernetes-cni
     scope: container
 resources:
-  calico-cni:
+  calico:
     type: file
-    filename: calico-cni.tar.gz
-    description: 'Calico CNI resource tarball.'
+    filename: calico.tar.gz
+    description: 'Calico resource tarball.'
