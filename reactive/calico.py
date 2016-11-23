@@ -145,7 +145,7 @@ def deploy_network_policy_controller(etcd, cni):
     render('policy-controller.yaml', '/tmp/policy-controller.yaml', context)
     cmd = ['kubectl',
            '--kubeconfig=' + cni.get_config()['kubeconfig_path'],
-           'create',
+           'apply',
            '-f',
            '/tmp/policy-controller.yaml']
     try:
