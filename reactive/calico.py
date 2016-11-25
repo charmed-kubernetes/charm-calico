@@ -133,6 +133,7 @@ def configure_cni(etcd, cni):
         'kubeconfig_path': cni_config['kubeconfig_path']
     }
     render('10-calico.conf', '/etc/cni/net.d/10-calico.conf', context)
+    cni.set_available()
     set_state('calico.cni.configured')
 
 
