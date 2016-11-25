@@ -1,5 +1,5 @@
 name: calico
-summary: Calico subordinate char
+summary: Calico subordinate charm
 maintainers:
   - Rye Terrell <rye.terrell@canonical.com>
 description: |
