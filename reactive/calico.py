@@ -62,6 +62,12 @@ def install_calico_binaries():
     set_state('calico.binaries.installed')
 
 
+@when('calico.binaries.installed')
+@when_not('etcd.connected')
+def blocked_without_etcd():
+    status_set('blocked', 'Waiting for relation to etcd')
+
+
 @when('etcd.tls.available')
 @when_not('calico.etcd-credentials.installed')
 def install_etcd_credentials(etcd):
@@ -152,4 +158,11 @@ def deploy_network_policy_controller(etcd, cni):
         check_call(cmd)
         set_state('calico.npc.deployed')
     except CalledProcessError as e:
+        status_set('waiting', 'Waiting for kubernetes')
         log(str(e))
+
+
+@when('calico.service.started')
+@when_any('cni.is-master', 'calico.npc.deployed')
+def ready():
+    status_set('active', 'Calico is active')
