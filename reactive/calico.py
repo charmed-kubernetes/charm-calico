@@ -2,7 +2,7 @@ import os
 from subprocess import check_call, CalledProcessError
 
 from charms.reactive import when, when_not, when_any, set_state
-from charmhelpers.core.hookenv import log, status_set, resource_get, unit_public_ip
+from charmhelpers.core.hookenv import log, status_set, resource_get, unit_private_ip
 from charmhelpers.core.host import service_start
 from charmhelpers.core.templating import render
 
@@ -88,7 +88,7 @@ def install_calico_service(etcd):
         'etcd_ca_path': ETCD_CA_PATH,
         'etcd_cert_path': ETCD_CERT_PATH,
         # specify IP so calico doesn't grab a silly one from, say, lxdbr0
-        'ip': unit_public_ip()
+        'ip': unit_private_ip()
     })
     set_state('calico.service.installed')
 
