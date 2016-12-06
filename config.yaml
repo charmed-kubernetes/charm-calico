@@ -1,1 +1,11 @@
-options: {}
+options:
+  ipip:
+    type: boolean
+    default: false
+    description: |
+      Enable IP tunneling
+  nat-outgoing:
+    type: boolean
+    default: true
+    description: |
+      NAT outgoing traffic

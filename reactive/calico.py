@@ -1,7 +1,8 @@
 import os
 from subprocess import check_call, CalledProcessError
 
-from charms.reactive import when, when_not, when_any, set_state
+from charms.reactive import when, when_not, when_any, set_state, remove_state
+from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import log, status_set, resource_get, unit_private_ip
 from charmhelpers.core.host import service_start
 from charmhelpers.core.templating import render
@@ -106,16 +107,27 @@ def start_calico_service():
       'calico.etcd-credentials.installed')
 @when_not('calico.pool.configured')
 def configure_calico_pool(etcd):
-    ''' Configure calico IP pool. '''
-    status_set('maintenance', 'Configuring calico IP pool')
+    ''' Configure Calico IP pool. '''
+    status_set('maintenance', 'Configuring Calico IP pool')
     env = os.environ.copy()
     env['ETCD_ENDPOINTS'] = etcd.get_connection_string()
     env['ETCD_KEY_FILE'] = ETCD_KEY_PATH
     env['ETCD_CERT_FILE'] = ETCD_CERT_PATH
     env['ETCD_CA_CERT_FILE'] = ETCD_CA_PATH
-    cmd = '/opt/calicoctl/calicoctl pool add 192.168.0.0/16 --nat-outgoing'
+    cmd = '/opt/calicoctl/calicoctl pool add 192.168.0.0/16'
+    config = hookenv.config()
+    if config['ipip']:
+      cmd += ' --ipip'
+    if config['nat-outgoing']:
+      cmd += ' --nat-outgoing'
     check_call(cmd.split(), env=env)
     set_state('calico.pool.configured')
+
+
+@when_any('config.changed.ipip', 'config.changed.nat-outgoing')
+def reconfigure_calico_pool():
+    ''' Reconfigure the Calico IP pool '''
+    remove_state('calico.pool.configured')
 
 
 @when('etcd.available', 'cni.is-worker')
@@ -163,7 +175,7 @@ def deploy_network_policy_controller(etcd, cni):
         log(str(e))
 
 
-@when('calico.service.started')
+@when('calico.service.started', 'calico.pool.configured')
 @when_any('cni.is-master', 'calico.npc.deployed')
 def ready():
     status_set('active', 'Calico is active')
