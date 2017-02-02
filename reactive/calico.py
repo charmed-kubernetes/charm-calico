@@ -48,6 +48,7 @@ def install_calico_binaries():
     log(cmd)
     check_call(cmd)
 
+    # REVIEW(Matt): Is there a suggested source for this tarball?  What versions of the pieces below does it contain?
     apps = [
         {'name': 'calicoctl', 'path': CALICOCTL_PATH},
         {'name': 'calico', 'path': '/opt/cni/bin'},
@@ -89,6 +90,7 @@ def install_calico_service(etcd):
         'etcd_ca_path': ETCD_CA_PATH,
         'etcd_cert_path': ETCD_CERT_PATH,
         # specify IP so calico doesn't grab a silly one from, say, lxdbr0
+        # REVIEW(Matt): I like the use of a fixed IP, but I'm worried that the IP might change (e.g. reboot and re-DHCP).  Not sure how much of a concern that is in a Juju environment.
         'ip': unit_private_ip()
     })
     set_state('calico.service.installed')
@@ -99,6 +101,7 @@ def install_calico_service(etcd):
 def start_calico_service():
     ''' Start the calico systemd service. '''
     status_set('maintenance', 'Starting calico-node service.')
+    # REVIEW(Matt): Do we also need to enable the service for after reboots?
     service_start('calico-node')
     set_state('calico.service.started')
 
@@ -116,6 +119,7 @@ def configure_calico_pool(etcd):
     env['ETCD_CA_CERT_FILE'] = ETCD_CA_PATH
     cmd = '/opt/calicoctl/calicoctl pool add 192.168.0.0/16'
     config = hookenv.config()
+    # REVIEW(Matt): Config would be better extended to specify the IP range (default is 192.168.0.0/16).  To change this, configure_calico_pool() should delete the existing pool and create a new one with the IPIP/nat-outgoing options.
     if config['ipip']:
       cmd += ' --ipip'
     if config['nat-outgoing']:
