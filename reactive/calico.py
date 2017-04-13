@@ -11,6 +11,8 @@ from charmhelpers.core.templating import render
 # TODO:
 #   - Handle the 'stop' hook by stopping and uninstalling all the things.
 
+os.environ['PATH'] += os.pathsep + os.path.join(os.sep, 'snap', 'bin')
+
 CALICOCTL_PATH = '/opt/calicoctl'
 ETCD_KEY_PATH = os.path.join(CALICOCTL_PATH, 'etcd-key')
 ETCD_CERT_PATH = os.path.join(CALICOCTL_PATH, 'etcd-cert')
