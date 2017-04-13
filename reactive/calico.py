@@ -3,7 +3,8 @@ from subprocess import check_call, CalledProcessError
 
 from charms.reactive import when, when_not, when_any, set_state, remove_state
 from charmhelpers.core import hookenv
-from charmhelpers.core.hookenv import log, status_set, resource_get, unit_private_ip
+from charmhelpers.core.hookenv import log, status_set, resource_get
+from charmhelpers.core.hookenv import unit_private_ip
 from charmhelpers.core.host import service_start
 from charmhelpers.core.templating import render
 
@@ -14,6 +15,8 @@ CALICOCTL_PATH = '/opt/calicoctl'
 ETCD_KEY_PATH = os.path.join(CALICOCTL_PATH, 'etcd-key')
 ETCD_CERT_PATH = os.path.join(CALICOCTL_PATH, 'etcd-cert')
 ETCD_CA_PATH = os.path.join(CALICOCTL_PATH, 'etcd-ca')
+CALICO_CIDR = '192.168.0.0/16'
+
 
 @when_not('calico.binaries.installed')
 def install_calico_binaries():
@@ -82,7 +85,8 @@ def install_etcd_credentials(etcd):
 def install_calico_service(etcd):
     ''' Install the calico-node systemd service. '''
     status_set('maintenance', 'Installing calico-node service.')
-    service_path = os.path.join(os.sep, 'lib', 'systemd', 'system', 'calico-node.service')
+    service_path = os.path.join(os.sep, 'lib', 'systemd', 'system',
+                                'calico-node.service')
     render('calico-node.service', service_path, {
         'connection_string': etcd.get_connection_string(),
         'etcd_key_path': ETCD_KEY_PATH,
@@ -114,12 +118,12 @@ def configure_calico_pool(etcd):
     env['ETCD_KEY_FILE'] = ETCD_KEY_PATH
     env['ETCD_CERT_FILE'] = ETCD_CERT_PATH
     env['ETCD_CA_CERT_FILE'] = ETCD_CA_PATH
-    cmd = '/opt/calicoctl/calicoctl pool add 192.168.0.0/16'
+    cmd = '/opt/calicoctl/calicoctl pool add ' + CALICO_CIDR
     config = hookenv.config()
     if config['ipip']:
-      cmd += ' --ipip'
+        cmd += ' --ipip'
     if config['nat-outgoing']:
-      cmd += ' --nat-outgoing'
+        cmd += ' --nat-outgoing'
     check_call(cmd.split(), env=env)
     set_state('calico.pool.configured')
 
@@ -145,7 +149,7 @@ def configure_cni(etcd, cni):
         'kubeconfig_path': cni_config['kubeconfig_path']
     }
     render('10-calico.conf', '/etc/cni/net.d/10-calico.conf', context)
-    cni.set_available()
+    cni.set_config(cidr=CALICO_CIDR)
     set_state('calico.cni.configured')
 
 
