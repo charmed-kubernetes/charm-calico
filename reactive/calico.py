@@ -3,7 +3,8 @@ from subprocess import check_call, CalledProcessError
 
 from charms.reactive import when, when_not, when_any, set_state, remove_state
 from charmhelpers.core import hookenv
-from charmhelpers.core.hookenv import log, status_set, resource_get, unit_private_ip
+from charmhelpers.core.hookenv import log, status_set, resource_get
+from charmhelpers.core.hookenv import unit_private_ip
 from charmhelpers.core.host import service_start
 from charmhelpers.core.templating import render
 
@@ -14,6 +15,7 @@ CALICOCTL_PATH = '/opt/calicoctl'
 ETCD_KEY_PATH = os.path.join(CALICOCTL_PATH, 'etcd-key')
 ETCD_CERT_PATH = os.path.join(CALICOCTL_PATH, 'etcd-cert')
 ETCD_CA_PATH = os.path.join(CALICOCTL_PATH, 'etcd-ca')
+
 
 @when_not('calico.binaries.installed')
 def install_calico_binaries():
@@ -82,7 +84,8 @@ def install_etcd_credentials(etcd):
 def install_calico_service(etcd):
     ''' Install the calico-node systemd service. '''
     status_set('maintenance', 'Installing calico-node service.')
-    service_path = os.path.join(os.sep, 'lib', 'systemd', 'system', 'calico-node.service')
+    service_path = os.path.join(os.sep, 'lib', 'systemd', 'system',
+                                'calico-node.service')
     render('calico-node.service', service_path, {
         'connection_string': etcd.get_connection_string(),
         'etcd_key_path': ETCD_KEY_PATH,
@@ -117,9 +120,9 @@ def configure_calico_pool(etcd):
     cmd = '/opt/calicoctl/calicoctl pool add 192.168.0.0/16'
     config = hookenv.config()
     if config['ipip']:
-      cmd += ' --ipip'
+        cmd += ' --ipip'
     if config['nat-outgoing']:
-      cmd += ' --nat-outgoing'
+        cmd += ' --nat-outgoing'
     check_call(cmd.split(), env=env)
     set_state('calico.pool.configured')
 
