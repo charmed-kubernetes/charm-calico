@@ -15,6 +15,7 @@ CALICOCTL_PATH = '/opt/calicoctl'
 ETCD_KEY_PATH = os.path.join(CALICOCTL_PATH, 'etcd-key')
 ETCD_CERT_PATH = os.path.join(CALICOCTL_PATH, 'etcd-cert')
 ETCD_CA_PATH = os.path.join(CALICOCTL_PATH, 'etcd-ca')
+CALICO_CIDR = '192.168.0.0/16'
 
 
 @when_not('calico.binaries.installed')
@@ -117,7 +118,7 @@ def configure_calico_pool(etcd):
     env['ETCD_KEY_FILE'] = ETCD_KEY_PATH
     env['ETCD_CERT_FILE'] = ETCD_CERT_PATH
     env['ETCD_CA_CERT_FILE'] = ETCD_CA_PATH
-    cmd = '/opt/calicoctl/calicoctl pool add 192.168.0.0/16'
+    cmd = '/opt/calicoctl/calicoctl pool add ' + CALICO_CIDR
     config = hookenv.config()
     if config['ipip']:
         cmd += ' --ipip'
@@ -148,7 +149,7 @@ def configure_cni(etcd, cni):
         'kubeconfig_path': cni_config['kubeconfig_path']
     }
     render('10-calico.conf', '/etc/cni/net.d/10-calico.conf', context)
-    cni.set_config(cidr='192.168.0.0/16')
+    cni.set_config(cidr=CALICO_CIDR)
     set_state('calico.cni.configured')
 
 
