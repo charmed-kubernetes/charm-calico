@@ -5,7 +5,7 @@ VMs, and bare metal services, that provides a rich set of security enforcement
 capabilities running on top of a highly scalable and efficient virtual network fabric.
 
 This charm will deploy calico as a background service, and configure CNI for
-use with flannel, on any principal charm that implements the
+use with calico, on any principal charm that implements the
 [`kubernetes-cni`](https://github.com/juju-solutions/interface-kubernetes-cni) interface.
 
 
