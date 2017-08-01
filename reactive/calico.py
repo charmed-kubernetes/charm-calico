@@ -129,7 +129,7 @@ def configure_calico_pool(etcd):
         'nat_outgoing': 'true' if config['nat-outgoing'] else 'false'
     }
     render('pool.yaml', '/tmp/calico-pool.yaml', context)
-    cmd = '/opt/calicoctl/calicoctl create --skip-exists -f /tmp/calico-pool.yaml'
+    cmd = '/opt/calicoctl/calicoctl apply -f /tmp/calico-pool.yaml'
     check_call(cmd.split(), env=env)
     set_state('calico.pool.configured')
 
