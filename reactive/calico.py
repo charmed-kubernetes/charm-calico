@@ -1,4 +1,5 @@
 import os
+from socket import gethostname
 from subprocess import check_call, CalledProcessError
 
 from charms.reactive import when, when_not, when_any, set_state, remove_state
@@ -94,6 +95,7 @@ def install_calico_service(etcd):
         'etcd_key_path': ETCD_KEY_PATH,
         'etcd_ca_path': ETCD_CA_PATH,
         'etcd_cert_path': ETCD_CERT_PATH,
+        'nodename': gethostname(),
         # specify IP so calico doesn't grab a silly one from, say, lxdbr0
         'ip': unit_private_ip()
     })
@@ -120,12 +122,14 @@ def configure_calico_pool(etcd):
     env['ETCD_KEY_FILE'] = ETCD_KEY_PATH
     env['ETCD_CERT_FILE'] = ETCD_CERT_PATH
     env['ETCD_CA_CERT_FILE'] = ETCD_CA_PATH
-    cmd = '/opt/calicoctl/calicoctl pool add ' + CALICO_CIDR
     config = hookenv.config()
-    if config['ipip']:
-        cmd += ' --ipip'
-    if config['nat-outgoing']:
-        cmd += ' --nat-outgoing'
+    context = {
+        'cidr': CALICO_CIDR,
+        'ipip': 'true' if config['ipip'] else 'false',
+        'nat_outgoing': 'true' if config['nat-outgoing'] else 'false'
+    }
+    render('pool.yaml', '/tmp/calico-pool.yaml', context)
+    cmd = '/opt/calicoctl/calicoctl apply -f /tmp/calico-pool.yaml'
     check_call(cmd.split(), env=env)
     set_state('calico.pool.configured')
 
