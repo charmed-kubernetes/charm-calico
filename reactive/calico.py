@@ -6,7 +6,7 @@ from charms.reactive import when, when_not, when_any, set_state, remove_state
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import log, status_set, resource_get
 from charmhelpers.core.hookenv import unit_private_ip
-from charmhelpers.core.host import service_start
+from charmhelpers.core.host import service, service_start
 from charmhelpers.core.templating import render
 
 # TODO:
@@ -108,6 +108,7 @@ def start_calico_service():
     ''' Start the calico systemd service. '''
     status_set('maintenance', 'Starting calico-node service.')
     service_start('calico-node')
+    service('enable', 'calico-node')
     set_state('calico.service.started')
 
 
