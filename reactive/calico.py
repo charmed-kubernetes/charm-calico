@@ -1,6 +1,6 @@
 import os
 from socket import gethostname
-from subprocess import check_call, CalledProcessError
+from subprocess import call, check_call, CalledProcessError
 
 from charms.reactive import when, when_not, when_any, set_state, remove_state
 from charmhelpers.core import hookenv
@@ -131,7 +131,10 @@ def configure_calico_pool(etcd):
     }
     render('pool.yaml', '/tmp/calico-pool.yaml', context)
     cmd = '/opt/calicoctl/calicoctl apply -f /tmp/calico-pool.yaml'
-    check_call(cmd.split(), env=env)
+    exit_code = call(cmd.split(), env=env)
+    if exit_code != 0:
+        status_set('waiting', 'Waiting to retry calico pool configuration')
+        return
     set_state('calico.pool.configured')
 
 
