@@ -97,7 +97,8 @@ def install_calico_service(etcd):
         'etcd_cert_path': ETCD_CERT_PATH,
         'nodename': gethostname(),
         # specify IP so calico doesn't grab a silly one from, say, lxdbr0
-        'ip': unit_private_ip()
+        'ip': unit_private_ip(),
+        'calico_node_image': hookenv.config('calico-node-image')
     })
     set_state('calico.service.installed')
 
@@ -127,7 +128,8 @@ def configure_calico_pool(etcd):
     context = {
         'cidr': CALICO_CIDR,
         'ipip': 'true' if config['ipip'] else 'false',
-        'nat_outgoing': 'true' if config['nat-outgoing'] else 'false'
+        'nat_outgoing': 'true' if config['nat-outgoing'] else 'false',
+        'calico_policy_image': hookenv.config('calico-policy-image')
     }
     render('pool.yaml', '/tmp/calico-pool.yaml', context)
     cmd = '/opt/calicoctl/calicoctl apply -f /tmp/calico-pool.yaml'

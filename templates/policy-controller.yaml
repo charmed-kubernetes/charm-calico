@@ -19,7 +19,7 @@ spec:
       hostNetwork: true
       containers:
         - name: calico-policy-controller
-          image: quay.io/calico/kube-policy-controller:v0.7.0
+          image: {{ calico_policy_image }}
           env:
             - name: ETCD_ENDPOINTS
               value: {{ connection_string }}
