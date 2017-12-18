@@ -3,6 +3,7 @@ from socket import gethostname
 from subprocess import call, check_call, CalledProcessError
 
 from charms.reactive import when, when_not, when_any, set_state, remove_state
+from charms.reactive import hook
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import log, status_set, resource_get
 from charmhelpers.core.hookenv import unit_private_ip
@@ -19,6 +20,17 @@ ETCD_KEY_PATH = os.path.join(CALICOCTL_PATH, 'etcd-key')
 ETCD_CERT_PATH = os.path.join(CALICOCTL_PATH, 'etcd-cert')
 ETCD_CA_PATH = os.path.join(CALICOCTL_PATH, 'etcd-ca')
 CALICO_CIDR = '192.168.0.0/16'
+
+
+@hook('upgrade-charm')
+def upgrade_charm():
+    remove_state('calico.binaries.installed')
+    remove_state('calico.cni.configured')
+    try:
+        log('Deleting /etc/cni/net.d/10-calico.conf')
+        os.remove('/etc/cni/net.d/10-calico.conf')
+    except FileNotFoundError as e:
+        log(e)
 
 
 @when_not('calico.binaries.installed')
@@ -58,6 +70,7 @@ def install_calico_binaries():
         {'name': 'calicoctl', 'path': CALICOCTL_PATH},
         {'name': 'calico', 'path': '/opt/cni/bin'},
         {'name': 'calico-ipam', 'path': '/opt/cni/bin'},
+        {'name': 'portmap', 'path': '/opt/cni/bin'},
     ]
 
     for app in apps:
@@ -129,7 +142,6 @@ def configure_calico_pool(etcd):
         'cidr': CALICO_CIDR,
         'ipip': 'true' if config['ipip'] else 'false',
         'nat_outgoing': 'true' if config['nat-outgoing'] else 'false',
-        'calico_policy_image': hookenv.config('calico-policy-image')
     }
     render('pool.yaml', '/tmp/calico-pool.yaml', context)
     cmd = '/opt/calicoctl/calicoctl apply -f /tmp/calico-pool.yaml'
@@ -160,7 +172,7 @@ def configure_cni(etcd, cni):
         'etcd_ca_path': ETCD_CA_PATH,
         'kubeconfig_path': cni_config['kubeconfig_path']
     }
-    render('10-calico.conf', '/etc/cni/net.d/10-calico.conf', context)
+    render('10-calico.conflist', '/etc/cni/net.d/10-calico.conflist', context)
     cni.set_config(cidr=CALICO_CIDR)
     set_state('calico.cni.configured')
 
@@ -175,7 +187,8 @@ def deploy_network_policy_controller(etcd, cni):
         'connection_string': etcd.get_connection_string(),
         'etcd_key_path': ETCD_KEY_PATH,
         'etcd_cert_path': ETCD_CERT_PATH,
-        'etcd_ca_path': ETCD_CA_PATH
+        'etcd_ca_path': ETCD_CA_PATH,
+        'calico_policy_image': hookenv.config('calico-policy-image')
     }
     render('policy-controller.yaml', '/tmp/policy-controller.yaml', context)
     cmd = ['kubectl',
