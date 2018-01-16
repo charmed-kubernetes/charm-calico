@@ -1,3 +1,39 @@
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: calico-policy-controller
+  namespace: kube-system
+rules:
+  - apiGroups:
+    - ""
+    - extensions
+    resources:
+      - pods
+      - namespaces
+      - networkpolicies
+    verbs:
+      - watch
+      - list
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: calico-policy-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: calico-policy-controller
+subjects:
+- kind: ServiceAccount
+  name: calico-policy-controller
+  namespace: kube-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: calico-policy-controller
+  namespace: kube-system
+---
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
@@ -17,6 +53,7 @@ spec:
         k8s-app: calico-policy
     spec:
       hostNetwork: true
+      serviceAccountName: calico-policy-controller
       containers:
         - name: calico-policy-controller
           image: {{ calico_policy_image }}
@@ -40,4 +77,3 @@ spec:
         - name: calicoctl
           hostPath:
             path: /opt/calicoctl
-              
