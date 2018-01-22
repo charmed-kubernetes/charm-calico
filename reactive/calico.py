@@ -95,6 +95,29 @@ def install_etcd_credentials(etcd):
     set_state('calico.etcd-credentials.installed')
 
 
+def get_bind_address():
+    ''' Returns a non-fan bind address for the cni endpoint '''
+    try:
+        data = hookenv.network_get('cni')
+    except NotImplementedError:
+        # Juju < 2.1
+        return unit_private_ip()
+
+    if 'bind-addresses' not in data:
+        # Juju < 2.3
+        return unit_private_ip()
+
+    for bind_address in data['bind-addresses']:
+        if bind_address['interfacename'].startswith('fan-'):
+            continue
+        return bind_address['addresses'][0]['address']
+
+    # If we made it here, we didn't find a non-fan CNI bind-address, which is
+    # unexpected. Let's log a message and play it safe.
+    log('Could not find a non-fan bind-address. Using private-address.')
+    return unit_private_ip()
+
+
 @when('calico.binaries.installed', 'etcd.available',
       'calico.etcd-credentials.installed')
 @when_not('calico.service.installed')
@@ -110,7 +133,7 @@ def install_calico_service(etcd):
         'etcd_cert_path': ETCD_CERT_PATH,
         'nodename': gethostname(),
         # specify IP so calico doesn't grab a silly one from, say, lxdbr0
-        'ip': unit_private_ip(),
+        'ip': get_bind_address(),
         'calico_node_image': hookenv.config('calico-node-image')
     })
     set_state('calico.service.installed')
