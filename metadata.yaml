@@ -9,6 +9,7 @@ tags:
 subordinate: true
 series:
   - xenial
+  - bionic
 requires:
   etcd:
     interface: etcd
