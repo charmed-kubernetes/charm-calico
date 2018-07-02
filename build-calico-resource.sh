@@ -4,15 +4,15 @@ set -eux
 rm -rf resource-build
 mkdir resource-build
 cd resource-build
-wget https://github.com/projectcalico/calicoctl/releases/download/v1.5.0/calicoctl
-wget https://github.com/projectcalico/cni-plugin/releases/download/v1.10.0/calico
-wget https://github.com/projectcalico/cni-plugin/releases/download/v1.10.0/calico-ipam
+wget https://github.com/projectcalico/calicoctl/releases/download/v1.6.4/calicoctl
+wget https://github.com/projectcalico/cni-plugin/releases/download/v1.11.6/calico
+wget https://github.com/projectcalico/cni-plugin/releases/download/v1.11.6/calico-ipam
 chmod +x calicoctl calico calico-ipam
 
 mkdir temp
 (cd temp
-  wget https://github.com/containernetworking/plugins/releases/download/v0.6.0/cni-plugins-amd64-v0.6.0.tgz
-  tar -vxf cni-plugins-amd64-v0.6.0.tgz
+  wget https://github.com/containernetworking/plugins/releases/download/v0.7.1/cni-plugins-amd64-v0.7.1.tgz
+  tar -vxf cni-plugins-amd64-v0.7.1.tgz
   mv portmap ..
 )
 rm -rf temp
