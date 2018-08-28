@@ -1,9 +1,14 @@
 name: calico
-summary: Calico subordinate charm
+summary: A robust Software Defined Network from Project Calico
 maintainers:
-  - Rye Terrell <rye.terrell@canonical.com>
+  - Tim Van Steenburgh <tim.van.steenburgh@canonical.com>
+  - George Kraft <george.kraft@canonical.com>
+  - Konstantinos Tsakalozos <kos.tsakalozos@canonical.com>
+  - Mike Wilson <mike.wilson@canonical.com>
+  - Kevin Monroe <kevin.monroe@canonical.com>
 description: |
-  Calico subordinate charm
+  Deploys Calico as a background service and configures CNI for use with
+  calico on any principal charm that implements the kubernetes-cni interface.
 tags:
   - networking
 subordinate: true
@@ -17,7 +22,11 @@ requires:
     interface: kubernetes-cni
     scope: container
 resources:
-  calico:
+  calico-amd64:
     type: file
     filename: calico.tar.gz
-    description: 'Calico resource tarball.'
+    description: 'Calico resource tarball for amd64'
+  calico-arm64:
+    type: file
+    filename: calico.tar.gz
+    description: 'Calico resource tarball for arm64'
