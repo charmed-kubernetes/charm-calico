@@ -22,7 +22,7 @@ requires:
     interface: kubernetes-cni
     scope: container
 resources:
-  calico-amd64:
+  calico:
     type: file
     filename: calico.tar.gz
     description: 'Calico resource tarball for amd64'
