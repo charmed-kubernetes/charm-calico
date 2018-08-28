@@ -36,8 +36,14 @@ def upgrade_charm():
 @when_not('calico.binaries.installed')
 def install_calico_binaries():
     ''' Unpack the Calico binaries. '''
+    # on intel, the resource is called 'calico'; other arches have a suffix
+    architecture = arch()
+    if architecture == "amd64":
+        resource_name = 'calico'
+    else:
+        resource_name = 'calico-{}'.format(architecture)
+
     try:
-        resource_name = 'calico-{}'.format(arch())
         archive = resource_get(resource_name)
     except Exception:
         message = 'Error fetching the calico resource.'
