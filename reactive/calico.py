@@ -1,6 +1,6 @@
 import os
 from socket import gethostname
-from subprocess import call, check_call, CalledProcessError
+from subprocess import call, check_call, check_output, CalledProcessError
 
 from charms.reactive import when, when_not, when_any, set_state, remove_state
 from charms.reactive import hook
@@ -37,7 +37,8 @@ def upgrade_charm():
 def install_calico_binaries():
     ''' Unpack the Calico binaries. '''
     try:
-        archive = resource_get('calico')
+        resource_name = 'calico-{}'.format(arch())
+        archive = resource_get(resource_name)
     except Exception:
         message = 'Error fetching the calico resource.'
         log(message)
@@ -231,3 +232,12 @@ def deploy_network_policy_controller(etcd, cni):
 @when_any('cni.is-master', 'calico.npc.deployed')
 def ready():
     status_set('active', 'Calico is active')
+
+
+def arch():
+    '''Return the package architecture as a string.'''
+    # Get the package architecture for this system.
+    architecture = check_output(['dpkg', '--print-architecture']).rstrip()
+    # Convert the binary result into a string.
+    architecture = architecture.decode('utf-8')
+    return architecture
