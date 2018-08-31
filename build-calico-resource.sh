@@ -1,26 +1,66 @@
 #!/bin/bash
 set -eux
 
+# This script will fetch binaries and create resource tarballs for use by
+# charm-[push|release]. The arm64 binaries are not available upsteram for
+# v2.6, so we must build them and host them somewhere ourselves. The steps
+# for doing that are documented here:
+#
+# https://gist.github.com/kwmonroe/9b5f8dac2c17f93629a1a3868b22d671
+
 # Supported calico architectures
 arches="amd64 arm64"
-
-# 2.6.x has no binary releases for arm64; fetch them from neander
-neander="ubuntu@10.96.66.14"
 
 fetch_cni_plugins() {
   arch=${1:-}
   if [ -z ${arch} ]; then
-    echo "Missing arch parameter to fetch_cni_plugins"
+    echo "$0: Missing arch parameter to fetch_cni_plugins"
     exit 1
   fi
 
   mkdir temp
   (cd temp
     wget https://github.com/containernetworking/plugins/releases/download/v0.7.1/cni-plugins-${arch}-v0.7.1.tgz
-    tar -vxf cni-plugins-${arch}-v0.7.1.tgz
+    # NB: we only use portmap from cni-plugins
+    tar -vxf cni-plugins-${arch}-v0.7.1.tgz ./portmap
     mv portmap ..
   )
   rm -rf temp
+}
+
+function fetch_and_validate() {
+  # fetch a binary and make sure it's what we expect (executable > 20MB)
+  min_bytes=20000000
+  location="${1-}"
+  if [ -z ${location} ]; then
+    echo "$0: Missing location parameter for fetch_and_validate"
+    exit 1
+  fi
+
+  # remove everything up until the last slash to get the filename
+  filename=$(echo "${location##*/}")
+  case ${location} in
+    http*)
+      fetch_cmd="wget ${location} -O ./${filename}"
+      ;;
+    *)
+      fetch_cmd="scp ${location} ./${filename}"
+      ;;
+  esac
+  ${fetch_cmd}
+
+  # Make sure we fetched something big enough
+  actual_bytes=$(wc -c < ${filename})
+  if [ $actual_bytes -le $min_bytes ]; then
+    echo "$0: ${filename} should be at least ${min_bytes} bytes"
+    exit 1
+  fi
+
+  # Make sure we fetched a binary
+  if ! file ${filename} 2>&1 | grep -q 'executable'; then
+    echo "$0: ${filename} is not an executable"
+    exit 1
+  fi
 }
 
 for arch in ${arches}; do
@@ -29,21 +69,27 @@ for arch in ${arches}; do
   pushd resource-build-$arch
 
   if [ $arch = "amd64" ]; then
-    wget https://github.com/projectcalico/calicoctl/releases/download/v1.6.4/calicoctl
-    wget https://github.com/projectcalico/cni-plugin/releases/download/v1.11.6/calico
-    wget https://github.com/projectcalico/cni-plugin/releases/download/v1.11.6/calico-ipam
+    fetch_and_validate \
+      https://github.com/projectcalico/calicoctl/releases/download/v1.6.4/calicoctl
+    fetch_and_validate \
+      https://github.com/projectcalico/cni-plugin/releases/download/v1.11.6/calico
+    fetch_and_validate \
+      https://github.com/projectcalico/cni-plugin/releases/download/v1.11.6/calico-ipam
   elif [ $arch = "arm64" ]; then
-    scp ${neander}:~/go/src/github.com/projectcalico/calicoctl/dist/calicoctl-linux-arm64 ./calicoctl
-    scp ${neander}:~/go/src/github.com/projectcalico/cni-plugin/dist/calico ./calico
-    scp ${neander}:~/go/src/github.com/projectcalico/cni-plugin/dist/calico-ipam ./calico-ipam
+    fetch_and_validate \
+      https://people.canonical.com/~kwmonroe/calico-2.6-arm64/calicoctl
+    fetch_and_validate \
+      https://people.canonical.com/~kwmonroe/calico-2.6-arm64/calico
+    fetch_and_validate \
+      https://people.canonical.com/~kwmonroe/calico-2.6-arm64/calico-ipam
   else
-    echo "Can't fetch binaries for $arch"
+    echo "$0: Unsupported architecture: $arch"
     exit 1
   fi
 
   fetch_cni_plugins $arch
   chmod +x calicoctl calico calico-ipam portmap
-  tar -vcaf ../calico-$arch.tar.gz .
+  tar -zcvf ../calico-$arch.tar.gz .
 
   popd
   rm -rf resource-build-$arch
