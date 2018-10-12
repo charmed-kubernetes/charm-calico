@@ -4,6 +4,7 @@ from subprocess import call, check_call, check_output, CalledProcessError
 
 from charms.reactive import when, when_not, when_any, set_state, remove_state
 from charms.reactive import hook
+from charms.reactive import endpoint_from_flag
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import log, status_set, resource_get
 from charmhelpers.core.hookenv import unit_private_ip
@@ -97,7 +98,8 @@ def blocked_without_etcd():
 
 @when('etcd.tls.available')
 @when_not('calico.etcd-credentials.installed')
-def install_etcd_credentials(etcd):
+def install_etcd_credentials():
+    etcd = endpoint_from_flag('etcd.available')
     etcd.save_client_credentials(ETCD_KEY_PATH, ETCD_CERT_PATH, ETCD_CA_PATH)
     set_state('calico.etcd-credentials.installed')
 
@@ -128,9 +130,10 @@ def get_bind_address():
 @when('calico.binaries.installed', 'etcd.available',
       'calico.etcd-credentials.installed')
 @when_not('calico.service.installed')
-def install_calico_service(etcd):
+def install_calico_service():
     ''' Install the calico-node systemd service. '''
     status_set('maintenance', 'Installing calico-node service.')
+    etcd = endpoint_from_flag('etcd.available')
     service_path = os.path.join(os.sep, 'lib', 'systemd', 'system',
                                 'calico-node.service')
     render('calico-node.service', service_path, {
@@ -159,9 +162,10 @@ def start_calico_service():
 @when('calico.binaries.installed', 'etcd.available',
       'calico.etcd-credentials.installed')
 @when_not('calico.pool.configured')
-def configure_calico_pool(etcd):
+def configure_calico_pool():
     ''' Configure Calico IP pool. '''
     status_set('maintenance', 'Configuring Calico IP pool')
+    etcd = endpoint_from_flag('etcd.available')
     env = os.environ.copy()
     env['ETCD_ENDPOINTS'] = etcd.get_connection_string()
     env['ETCD_KEY_FILE'] = ETCD_KEY_PATH
@@ -188,11 +192,17 @@ def reconfigure_calico_pool():
     remove_state('calico.pool.configured')
 
 
-@when('etcd.available', 'cni.is-worker')
+@when('etcd.available')
+# the interface only sets is-master or is-worker when the config is set, but
+# it doesn't indicate it with a is-configured or something. So we have to
+# look for either of them to verify cni is configured
+@when_any('cni.is-master', 'cni.is-worker')
 @when_not('calico.cni.configured')
-def configure_cni(etcd, cni):
+def configure_cni():
     ''' Configure Calico CNI. '''
     status_set('maintenance', 'Configuring Calico CNI')
+    cni = endpoint_from_flag('cni.connected')
+    etcd = endpoint_from_flag('etcd.available')
     os.makedirs('/etc/cni/net.d', exist_ok=True)
     cni_config = cni.get_config()
     context = {
@@ -210,9 +220,10 @@ def configure_cni(etcd, cni):
 @when('etcd.available', 'calico.cni.configured',
       'calico.service.started', 'cni.is-worker')
 @when_not('calico.npc.deployed')
-def deploy_network_policy_controller(etcd, cni):
+def deploy_network_policy_controller():
     ''' Deploy the Calico network policy controller. '''
     status_set('maintenance', 'Deploying network policy controller.')
+    etcd = endpoint_from_flag('etcd.available')
     context = {
         'connection_string': etcd.get_connection_string(),
         'etcd_key_path': ETCD_KEY_PATH,
@@ -234,8 +245,9 @@ def deploy_network_policy_controller(etcd, cni):
         log(str(e))
 
 
-@when('calico.service.started', 'calico.pool.configured')
-@when_any('cni.is-master', 'calico.npc.deployed')
+@when('calico.service.started', 'calico.pool.configured',
+      'calico.cni.configured')
+@when_any('calico.npc.deployed', 'cni.is-master')
 def ready():
     status_set('active', 'Calico is active')
 
