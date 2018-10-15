@@ -197,7 +197,7 @@ def reconfigure_calico_pool():
 def configure_cni():
     ''' Configure Calico CNI. '''
     status_set('maintenance', 'Configuring Calico CNI')
-    cni = endpoint_from_flag('cni.connected')
+    cni = endpoint_from_flag('cni.is-worker')
     etcd = endpoint_from_flag('etcd.available')
     os.makedirs('/etc/cni/net.d', exist_ok=True)
     cni_config = cni.get_config()
@@ -217,7 +217,7 @@ def configure_cni():
 @when_not('calico.cni.configured')
 def configure_master_cni():
     status_set('maintenance', 'Configuring Calico CNI')
-    cni = endpoint_from_flag('cni.connected')
+    cni = endpoint_from_flag('cni.is-master')
     cni.set_config(cidr=CALICO_CIDR)
     set_state('calico.cni.configured')
 
