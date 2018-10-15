@@ -192,11 +192,7 @@ def reconfigure_calico_pool():
     remove_state('calico.pool.configured')
 
 
-@when('etcd.available')
-# the interface only sets is-master or is-worker when the config is set, but
-# it doesn't indicate it with a is-configured or something. So we have to
-# look for either of them to verify cni is configured
-@when_any('cni.is-master', 'cni.is-worker')
+@when('etcd.available', 'cni.is-worker')
 @when_not('calico.cni.configured')
 def configure_cni():
     ''' Configure Calico CNI. '''
@@ -213,6 +209,15 @@ def configure_cni():
         'kubeconfig_path': cni_config['kubeconfig_path']
     }
     render('10-calico.conflist', '/etc/cni/net.d/10-calico.conflist', context)
+    cni.set_config(cidr=CALICO_CIDR)
+    set_state('calico.cni.configured')
+
+
+@when('etcd.available', 'cni.is-master')
+@when_not('calico.cni.configured')
+def configure_master_cni():
+    status_set('maintenance', 'Configuring Calico CNI')
+    cni = endpoint_from_flag('cni.connected')
     cni.set_config(cidr=CALICO_CIDR)
     set_state('calico.cni.configured')
 
@@ -247,7 +252,7 @@ def deploy_network_policy_controller():
 
 @when('calico.service.started', 'calico.pool.configured',
       'calico.cni.configured')
-@when_any('calico.npc.deployed', 'cni.is-master')
+@when_any('cni.is-master', 'calico.npc.deployed')
 def ready():
     status_set('active', 'Calico is active')
 
