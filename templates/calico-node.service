@@ -7,6 +7,7 @@ Requires=docker.service
 User=root
 Environment=ETCD_ENDPOINTS={{ connection_string }}
 PermissionsStartOnly=true
+ExecStartPre=-/usr/bin/docker rm -f calico-node
 ExecStart=/usr/bin/docker run --net=host --privileged --name=calico-node \
   -e ETCD_ENDPOINTS={{ connection_string }} \
   -e ETCD_CA_CERT_FILE={{ etcd_ca_path }} \
