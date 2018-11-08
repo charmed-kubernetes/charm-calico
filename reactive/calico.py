@@ -8,7 +8,7 @@ from charms.reactive import endpoint_from_flag
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import log, status_set, resource_get
 from charmhelpers.core.hookenv import unit_private_ip
-from charmhelpers.core.host import service, service_start
+from charmhelpers.core.host import service, service_start, service_running
 from charmhelpers.core.templating import render
 
 # TODO:
@@ -254,7 +254,10 @@ def deploy_network_policy_controller():
       'calico.cni.configured')
 @when_any('cni.is-master', 'calico.npc.deployed')
 def ready():
-    status_set('active', 'Calico is active')
+    if not service_running('calico-node'):
+        status_set('waiting', 'Waiting for service: calico-node')
+    else:
+        status_set('active', 'Calico is active')
 
 
 def arch():
