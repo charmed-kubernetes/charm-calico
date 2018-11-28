@@ -2,12 +2,12 @@ options:
   calico-node-image:
     type: string
     # Please refer to layer-canal/versioning.md before changing the version below.
-    default: quay.io/calico/node:v2.6.10
+    default: quay.io/calico/node:v2.6.12
     description: |
       The image id to use for calico/node.
   calico-policy-image:
     type: string
-    default: quay.io/calico/kube-controllers:v1.0.4
+    default: quay.io/calico/kube-controllers:v1.0.5
     description: |
       The image id to use for calico/kube-controllers.
   ipip:

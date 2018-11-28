@@ -53,11 +53,11 @@ for arch in ${arches}; do
 
   if [ $arch = "amd64" ]; then
     fetch_and_validate \
-      https://github.com/projectcalico/calicoctl/releases/download/v1.6.4/calicoctl
+      https://github.com/projectcalico/calicoctl/releases/download/v1.6.5/calicoctl
     fetch_and_validate \
-      https://github.com/projectcalico/cni-plugin/releases/download/v1.11.6/calico
+      https://github.com/projectcalico/cni-plugin/releases/download/v1.11.8/calico
     fetch_and_validate \
-      https://github.com/projectcalico/cni-plugin/releases/download/v1.11.6/calico-ipam
+      https://github.com/projectcalico/cni-plugin/releases/download/v1.11.8/calico-ipam
   elif [ $arch = "arm64" ]; then
     fetch_and_validate \
       https://people.canonical.com/~kwmonroe/calico-2.6-arm64/calicoctl
