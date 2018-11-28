@@ -11,23 +11,6 @@ set -eux
 # Supported calico architectures
 arches="amd64 arm64"
 
-fetch_cni_plugins() {
-  arch=${1:-}
-  if [ -z ${arch} ]; then
-    echo "$0: Missing arch parameter to fetch_cni_plugins"
-    exit 1
-  fi
-
-  mkdir temp
-  (cd temp
-    wget https://github.com/containernetworking/plugins/releases/download/v0.7.1/cni-plugins-${arch}-v0.7.1.tgz
-    # NB: we only use portmap from cni-plugins
-    tar -vxf cni-plugins-${arch}-v0.7.1.tgz ./portmap
-    mv portmap ..
-  )
-  rm -rf temp
-}
-
 function fetch_and_validate() {
   # fetch a binary and make sure it's what we expect (executable > 20MB)
   min_bytes=20000000
@@ -87,8 +70,7 @@ for arch in ${arches}; do
     exit 1
   fi
 
-  fetch_cni_plugins $arch
-  chmod +x calicoctl calico calico-ipam portmap
+  chmod +x calicoctl calico calico-ipam
   tar -zcvf ../calico-$arch.tar.gz .
 
   popd

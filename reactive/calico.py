@@ -78,7 +78,6 @@ def install_calico_binaries():
         {'name': 'calicoctl', 'path': CALICOCTL_PATH},
         {'name': 'calico', 'path': '/opt/cni/bin'},
         {'name': 'calico-ipam', 'path': '/opt/cni/bin'},
-        {'name': 'portmap', 'path': '/opt/cni/bin'},
     ]
 
     for app in apps:
