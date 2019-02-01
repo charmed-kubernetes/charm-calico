@@ -148,7 +148,7 @@ def install_calico_service():
     set_state('calico.service.installed')
 
 
-@when('calico.service.installed', 'docker.available')
+@when('calico.service.installed')
 @when_not('calico.service.started')
 def start_calico_service():
     ''' Start the calico systemd service. '''
