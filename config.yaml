@@ -2,19 +2,19 @@ options:
   calico-node-image:
     type: string
     # Please refer to layer-canal/versioning.md before changing the version below.
-    default: quay.io/calico/node:v2.6.12
+    default: docker.io/calico/node:v3.6.1
     description: |
       The image id to use for calico/node.
   calico-policy-image:
     type: string
-    default: quay.io/calico/kube-controllers:v1.0.5
+    default: docker.io/calico/kube-controllers:v3.6.1
     description: |
       The image id to use for calico/kube-controllers.
   ipip:
-    type: boolean
-    default: false
+    type: string
+    default: Never
     description: |
-      Enable IP tunneling
+      IPIP mode. Must be one of "Always", "CrossSubnet", or "Never".
   nat-outgoing:
     type: boolean
     default: true

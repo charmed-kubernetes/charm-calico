@@ -173,7 +173,7 @@ def configure_calico_pool():
     config = hookenv.config()
     context = {
         'cidr': CALICO_CIDR,
-        'ipip': 'true' if config['ipip'] else 'false',
+        'ipip': config['ipip'],
         'nat_outgoing': 'true' if config['nat-outgoing'] else 'false',
     }
     render('pool.yaml', '/tmp/calico-pool.yaml', context)
