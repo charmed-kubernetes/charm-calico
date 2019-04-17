@@ -2,4 +2,5 @@ includes:
   - 'interface:etcd'
   - 'interface:kubernetes-cni'
   - 'layer:basic'
+  - 'layer:leadership'
 repo: https://github.com/juju-solutions/layer-calico.git

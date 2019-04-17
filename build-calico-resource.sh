@@ -12,6 +12,7 @@ set -eux
 arches="amd64 arm64"
 calicoctl_version="v3.6.1"
 calico_cni_version="v3.6.1"
+calico_upgrade_version="v1.0.5"
 
 function fetch_and_validate() {
   # fetch a binary and make sure it's what we expect (executable > 20MB)
@@ -68,3 +69,14 @@ for arch in ${arches}; do
   popd
   rm -rf resource-build-$arch
 done
+
+# calico-upgrade resource
+rm -rf resource-build-upgrade
+mkdir resource-build-upgrade
+pushd resource-build-upgrade
+fetch_and_validate \
+  https://github.com/projectcalico/calico-upgrade/releases/download/$calico_upgrade_version/calico-upgrade
+chmod +x calico-upgrade
+tar -zcvf ../calico-upgrade.tar.gz .
+popd
+rm -rf resource-build-upgrade
