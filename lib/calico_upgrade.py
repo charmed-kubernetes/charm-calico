@@ -2,6 +2,7 @@ import os
 import shutil
 import yaml
 from subprocess import check_call, check_output, CalledProcessError
+from calico_common import arch
 from charms.reactive import endpoint_from_flag
 from charmhelpers.core.hookenv import resource_get, status_set, log
 
@@ -31,8 +32,11 @@ def configure():
     os.makedirs(CALICO_UPGRADE_DIR)
 
     # Extract calico-upgrade resource
-    # FIXME: alt arch
-    resource_name = 'calico-upgrade'
+    architecture = arch()
+    if architecture == 'amd64':
+        resource_name = 'calico-upgrade'
+    else:
+        resource_name = 'calico-upgrade-' + architecture
     archive = resource_get(resource_name)
 
     if not archive:

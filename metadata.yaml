@@ -33,4 +33,8 @@ resources:
   calico-upgrade:
     type: file
     filename: calico-upgrade.tar.gz
-    description: 'calico-upgrade tool for v2-v3 migration'
+    description: 'calico-upgrade tool for amd64'
+  calico-upgrade-arm64:
+    type: file
+    filename: calico-upgrade.tar.gz
+    description: 'calico-upgrade tool for arm64'

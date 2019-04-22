@@ -12,7 +12,6 @@ set -eux
 arches="amd64 arm64"
 calicoctl_version="v3.6.1"
 calico_cni_version="v3.6.1"
-calico_upgrade_version="v1.0.5"
 
 function fetch_and_validate() {
   # fetch a binary and make sure it's what we expect (executable > 20MB)
@@ -71,12 +70,29 @@ for arch in ${arches}; do
 done
 
 # calico-upgrade resource
-rm -rf resource-build-upgrade
-mkdir resource-build-upgrade
-pushd resource-build-upgrade
-fetch_and_validate \
-  https://github.com/projectcalico/calico-upgrade/releases/download/$calico_upgrade_version/calico-upgrade
-chmod +x calico-upgrade
-tar -zcvf ../calico-upgrade.tar.gz .
-popd
-rm -rf resource-build-upgrade
+for arch in ${arches}; do
+  rm -rf resource-build-upgrade
+  mkdir resource-build-upgrade
+  pushd resource-build-upgrade
+  if [ $arch = amd64 ]; then
+    fetch_and_validate \
+      https://github.com/projectcalico/calico-upgrade/releases/download/v1.0.5/calico-upgrade
+    chmod +x calico-upgrade
+  elif [ $arch = arm64 ]; then
+    git clone https://github.com/projectcalico/calico-upgrade repo
+    pushd repo
+    git checkout 2de2f7a0f26ef3bb1c2cabf06b2dcbcc2bba1d35  # known good commit
+    make build ARCH=arm64
+    popd
+    mv repo/dist/calico-upgrade-linux-$arch ./calico-upgrade
+  else
+    echo "Unsupported architecture for calico-upgrade: $arch"
+    exit 1
+  fi
+  tar -zcvf ../calico-upgrade-$arch.tar.gz ./calico-upgrade
+  popd
+  rm -rf resource-build-upgrade
+done
+
+# calico-upgrade arm64
+rm -rf resource-build-upgrade-arm64

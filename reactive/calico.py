@@ -5,6 +5,7 @@ from socket import gethostname
 from subprocess import check_call, check_output, CalledProcessError
 
 import calico_upgrade
+from calico_common import arch
 from charms.leadership import leader_get, leader_set
 from charms.reactive import when, when_not, when_any, set_state, remove_state
 from charms.reactive import hook
@@ -346,15 +347,6 @@ def ready():
         status_set('waiting', 'Waiting for service: calico-node')
     else:
         status_set('active', 'Calico is active')
-
-
-def arch():
-    '''Return the package architecture as a string.'''
-    # Get the package architecture for this system.
-    architecture = check_output(['dpkg', '--print-architecture']).rstrip()
-    # Convert the binary result into a string.
-    architecture = architecture.decode('utf-8')
-    return architecture
 
 
 def calicoctl(*args):
