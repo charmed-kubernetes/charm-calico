@@ -168,7 +168,20 @@ def install_calico_binaries():
         install = ['install', '-v', '-D', unpacked, app_path]
         check_call(install)
 
+    calicoctl_path = '/usr/local/bin/calicoctl'
+    render('calicoctl', calicoctl_path, {})
+    os.chmod(calicoctl_path, 0o775)
+
     set_state('calico.binaries.installed')
+
+
+@when('calico.binaries.installed', 'etcd.available')
+def update_calicoctl_env():
+    env = get_calicoctl_env()
+    lines = ['export %s=%s' % item for item in sorted(env.items())]
+    output = '\n'.join(lines)
+    with open('/opt/calicoctl/calicoctl.env', 'w') as f:
+        f.write(output)
 
 
 @when('calico.binaries.installed')
@@ -351,12 +364,8 @@ def ready():
 
 def calicoctl(*args):
     cmd = ['/opt/calicoctl/calicoctl'] + list(args)
-    etcd = endpoint_from_flag('etcd.available')
     env = os.environ.copy()
-    env['ETCD_ENDPOINTS'] = etcd.get_connection_string()
-    env['ETCD_KEY_FILE'] = ETCD_KEY_PATH
-    env['ETCD_CERT_FILE'] = ETCD_CERT_PATH
-    env['ETCD_CA_CERT_FILE'] = ETCD_CA_PATH
+    env.update(get_calicoctl_env())
     try:
         return check_output(cmd, env=env)
     except CalledProcessError as e:
@@ -371,3 +380,13 @@ def kubectl(*args):
     except CalledProcessError as e:
         log(e.output)
         raise
+
+
+def get_calicoctl_env():
+    etcd = endpoint_from_flag('etcd.available')
+    env = {}
+    env['ETCD_ENDPOINTS'] = etcd.get_connection_string()
+    env['ETCD_KEY_FILE'] = ETCD_KEY_PATH
+    env['ETCD_CERT_FILE'] = ETCD_CERT_PATH
+    env['ETCD_CA_CERT_FILE'] = ETCD_CA_PATH
+    return env
