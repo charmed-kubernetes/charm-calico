@@ -251,6 +251,12 @@ def install_calico_service():
 @when_not('calico.pool.configured')
 def configure_calico_pool():
     ''' Configure Calico IP pool. '''
+    config = hookenv.config()
+    if not config['manage-pools']:
+        log('Skipping pool configuration')
+        set_state('calico.pool.configured')
+        return
+
     status_set('maintenance', 'Configuring Calico IP pool')
 
     # remove unrecognized pools, or default pool if CIDR doesn't match
@@ -278,7 +284,6 @@ def configure_calico_pool():
             return
 
     # configure the default pool
-    config = hookenv.config()
     context = {
         'cidr': config['cidr'],
         'ipip': config['ipip'],
@@ -294,7 +299,7 @@ def configure_calico_pool():
 
 
 @when_any('config.changed.ipip', 'config.changed.nat-outgoing',
-          'config.changed.cidr')
+          'config.changed.cidr', 'config.changed.manage-pools')
 def reconfigure_calico_pool():
     ''' Reconfigure the Calico IP pool '''
     remove_state('calico.pool.configured')

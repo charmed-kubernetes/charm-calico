@@ -27,3 +27,9 @@ options:
       Network CIDR assigned to Calico. This is applied to the default Calico
       pool, and is also communicated to the Kubernetes charms for use in
       kube-proxy configuration.
+  manage-pools:
+    type: boolean
+    default: true
+    description: |
+      If true, a default pool is created using the cidr and ipip charm
+      configuration values. Any unrecognized pools are deleted.
