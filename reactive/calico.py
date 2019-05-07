@@ -25,7 +25,6 @@ CALICOCTL_PATH = '/opt/calicoctl'
 ETCD_KEY_PATH = os.path.join(CALICOCTL_PATH, 'etcd-key')
 ETCD_CERT_PATH = os.path.join(CALICOCTL_PATH, 'etcd-cert')
 ETCD_CA_PATH = os.path.join(CALICOCTL_PATH, 'etcd-ca')
-CALICO_CIDR = '192.168.0.0/16'
 CALICO_UPGRADE_DIR = '/opt/calico-upgrade'
 
 
@@ -35,7 +34,6 @@ def upgrade_charm():
     remove_state('calico.cni.configured')
     remove_state('calico.service.installed')
     remove_state('calico.pool.configured')
-    remove_state('calico.cni.configured')
     remove_state('calico.npc.deployed')
     try:
         log('Deleting /etc/cni/net.d/10-calico.conf')
@@ -255,7 +253,7 @@ def configure_calico_pool():
     ''' Configure Calico IP pool. '''
     status_set('maintenance', 'Configuring Calico IP pool')
 
-    # remove unrecognized pools
+    # remove unrecognized pools, or default pool if CIDR doesn't match
     try:
         output = calicoctl('get', 'pool', '-o', 'yaml').decode('utf-8')
     except CalledProcessError:
@@ -263,23 +261,26 @@ def configure_calico_pool():
         status_set('waiting', 'Waiting to retry calico pool configuration')
         return
 
-    pool_data = yaml.safe_load(output)
-    pools = [item['metadata']['name'] for item in pool_data['items']]
-    pools_to_delete = [pool for pool in pools if pool != 'default']
+    pools = yaml.safe_load(output)['items']
+    pool_names_to_delete = [
+        pool['metadata']['name'] for pool in pools
+        if pool['metadata']['name'] != 'default'
+        or pool['spec']['cidr'] != config['cidr']
+    ]
 
-    for pool in pools_to_delete:
-        log('Deleting pool: %s' % pool)
+    for pool_name in pool_names_to_delete:
+        log('Deleting pool: %s' % pool_name)
         try:
-            calicoctl('delete', 'pool', pool, '--skip-not-exists')
+            calicoctl('delete', 'pool', pool_name, '--skip-not-exists')
         except CalledProcessError:
-            log('Failed to delete pool: %s' % pool)
+            log('Failed to delete pool: %s' % pool_name)
             status_set('waiting', 'Waiting to retry calico pool configuration')
             return
 
     # configure the default pool
     config = hookenv.config()
     context = {
-        'cidr': CALICO_CIDR,
+        'cidr': config['cidr'],
         'ipip': config['ipip'],
         'nat_outgoing': 'true' if config['nat-outgoing'] else 'false',
     }
@@ -292,7 +293,8 @@ def configure_calico_pool():
     set_state('calico.pool.configured')
 
 
-@when_any('config.changed.ipip', 'config.changed.nat-outgoing')
+@when_any('config.changed.ipip', 'config.changed.nat-outgoing',
+          'config.changed.cidr')
 def reconfigure_calico_pool():
     ''' Reconfigure the Calico IP pool '''
     remove_state('calico.pool.configured')
@@ -315,7 +317,8 @@ def configure_cni():
         'kubeconfig_path': cni_config['kubeconfig_path']
     }
     render('10-calico.conflist', '/etc/cni/net.d/10-calico.conflist', context)
-    cni.set_config(cidr=CALICO_CIDR)
+    config = hookenv.config()
+    cni.set_config(cidr=config['cidr'])
     set_state('calico.cni.configured')
 
 
@@ -324,8 +327,14 @@ def configure_cni():
 def configure_master_cni():
     status_set('maintenance', 'Configuring Calico CNI')
     cni = endpoint_from_flag('cni.is-master')
-    cni.set_config(cidr=CALICO_CIDR)
+    config = hookenv.config()
+    cni.set_config(cidr=config['cidr'])
     set_state('calico.cni.configured')
+
+
+@when_any('config.changed.cidr')
+def reconfigure_cni():
+    remove_state('calico.cni.configured')
 
 
 @when('etcd.available', 'calico.cni.configured',

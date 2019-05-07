@@ -20,3 +20,10 @@ options:
     default: true
     description: |
       NAT outgoing traffic
+  cidr:
+    type: string
+    default: "192.168.0.0/16"
+    description: |
+      Network CIDR assigned to Calico. This is applied to the default Calico
+      pool, and is also communicated to the Kubernetes charms for use in
+      kube-proxy configuration.
