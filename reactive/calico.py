@@ -35,6 +35,7 @@ def upgrade_charm():
     remove_state('calico.service.installed')
     remove_state('calico.pool.configured')
     remove_state('calico.npc.deployed')
+    remove_state('calico.bgp.globals.configured')
     try:
         log('Deleting /etc/cni/net.d/10-calico.conf')
         os.remove('/etc/cni/net.d/10-calico.conf')
@@ -366,8 +367,58 @@ def deploy_network_policy_controller():
         log(str(e))
 
 
+@when('calico.binaries.installed', 'etcd.available',
+      'leadership.set.calico-v3-data-ready')
+@when_not('calico.bgp.globals.configured')
+def configure_bgp_globals():
+    status_set('maintenance', 'Configuring BGP globals')
+    try:
+        output = calicoctl(
+            'get', 'bgpconfig', 'default', '--export', '-o', 'yaml'
+        )
+    except CalledProcessError as e:
+        if b'resource does not exist' in e.output:
+            log('default BGPConfiguration does not exist')
+            output = None
+        else:
+            log(traceback.format_exc())
+            status_set('waiting', 'Waiting to retry BGP global configuration')
+            return
+
+    if output:
+        bgp_config = yaml.safe_load(output)
+    else:
+        bgp_config = {
+            'apiVersion': 'projectcalico.org/v3',
+            'kind': 'BGPConfiguration',
+            'metadata': {
+                'name': 'default'
+            },
+            'spec': {}
+        }
+
+    config = hookenv.config()
+    bgp_config['spec']['asNumber'] = config['global-as-number']
+    path = '/tmp/bgp-configuration.yml'
+    with open(path, 'w') as f:
+        yaml.dump(bgp_config, f)
+    try:
+        calicoctl('apply', '-f', path)
+    except CalledProcessError:
+        log(traceback.format_exc())
+        status_set('waiting', 'Waiting to retry BGP global configuration')
+        return
+
+    set_state('calico.bgp.globals.configured')
+
+
+@when_any('config.changed.global-as-number')
+def reconfigure_bgp_globals():
+    remove_state('calico.bgp.globals.configured')
+
+
 @when('calico.service.installed', 'calico.pool.configured',
-      'calico.cni.configured')
+      'calico.cni.configured', 'calico.bgp.globals.configured')
 @when_any('cni.is-master', 'calico.npc.deployed')
 def ready():
     if not service_running('calico-node'):

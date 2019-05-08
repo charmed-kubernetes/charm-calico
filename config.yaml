@@ -33,3 +33,8 @@ options:
     description: |
       If true, a default pool is created using the cidr and ipip charm
       configuration values. Any unrecognized pools are deleted.
+  global-as-number:
+    type: int
+    default: 64512
+    description: |
+      Global AS number.
