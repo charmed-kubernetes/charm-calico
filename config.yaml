@@ -38,3 +38,30 @@ options:
     default: 64512
     description: |
       Global AS number.
+  subnet-as-numbers:
+    type: string
+    default: "{}"
+    description: |
+      Mapping of subnets to AS numbers, specified as YAML. Each Calico node
+      will be assigned an AS number based on the entries in this mapping.
+
+      Example value: "{10.0.0.0/24: 64512, 10.0.1.0/24: 64513}"
+
+      If a node's IP matches any of the specified subnets, then the
+      corresponding AS number is used instead of the global one.
+
+      If a node's IP matches no subnets, then the global AS number will be
+      used instead.
+
+      If a node's IP matches multiple subnets, then the most specific subnet
+      will be used, e.g. a /24 subnet will take precedence over a /16.
+  unit-as-numbers:
+    type: string
+    default: "{}"
+    description: |
+      Mapping of unit IDs to AS numbers, specified as YAML. Each Calico node
+      will be assigned an AS number based on the entries in this mapping.
+
+      Example value: "{0: 64512, 1: 64513}"
+
+      This takes precedence over global-as-number and subnet-as-numbers.

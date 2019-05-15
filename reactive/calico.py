@@ -1,3 +1,4 @@
+import ipaddress
 import os
 import traceback
 import yaml
@@ -36,6 +37,7 @@ def upgrade_charm():
     remove_state('calico.pool.configured')
     remove_state('calico.npc.deployed')
     remove_state('calico.bgp.globals.configured')
+    remove_state('calico.node.configured')
     try:
         log('Deleting /etc/cni/net.d/10-calico.conf')
         os.remove('/etc/cni/net.d/10-calico.conf')
@@ -260,42 +262,40 @@ def configure_calico_pool():
 
     status_set('maintenance', 'Configuring Calico IP pool')
 
-    # remove unrecognized pools, or default pool if CIDR doesn't match
     try:
-        output = calicoctl('get', 'pool', '-o', 'yaml').decode('utf-8')
-    except CalledProcessError:
-        log('Failed to get pools')
-        status_set('waiting', 'Waiting to retry calico pool configuration')
-        return
+        # remove unrecognized pools, and default pool if CIDR doesn't match
+        pools = calicoctl_get('pool')['items']
 
-    pools = yaml.safe_load(output)['items']
-    pool_names_to_delete = [
-        pool['metadata']['name'] for pool in pools
-        if pool['metadata']['name'] != 'default'
-        or pool['spec']['cidr'] != config['cidr']
-    ]
+        pool_names_to_delete = [
+            pool['metadata']['name'] for pool in pools
+            if pool['metadata']['name'] != 'default'
+            or pool['spec']['cidr'] != config['cidr']
+        ]
 
-    for pool_name in pool_names_to_delete:
-        log('Deleting pool: %s' % pool_name)
-        try:
+        for pool_name in pool_names_to_delete:
+            log('Deleting pool: %s' % pool_name)
             calicoctl('delete', 'pool', pool_name, '--skip-not-exists')
-        except CalledProcessError:
-            log('Failed to delete pool: %s' % pool_name)
-            status_set('waiting', 'Waiting to retry calico pool configuration')
-            return
 
-    # configure the default pool
-    context = {
-        'cidr': config['cidr'],
-        'ipip': config['ipip'],
-        'nat_outgoing': 'true' if config['nat-outgoing'] else 'false',
-    }
-    render('pool.yaml', '/tmp/calico-pool.yaml', context)
-    try:
-        calicoctl('apply', '-f', '/tmp/calico-pool.yaml')
+        # configure the default pool
+        pool = {
+            'apiVersion': 'projectcalico.org/v3',
+            'kind': 'IPPool',
+            'metadata': {
+                'name': 'default'
+            },
+            'spec': {
+                'cidr': config['cidr'],
+                'ipipMode': config['ipip'],
+                'natOutgoing': config['nat-outgoing']
+            }
+        }
+
+        calicoctl_apply(pool)
     except CalledProcessError:
+        log(traceback.format_exc())
         status_set('waiting', 'Waiting to retry calico pool configuration')
         return
+
     set_state('calico.pool.configured')
 
 
@@ -372,38 +372,27 @@ def deploy_network_policy_controller():
 @when_not('calico.bgp.globals.configured')
 def configure_bgp_globals():
     status_set('maintenance', 'Configuring BGP globals')
-    try:
-        output = calicoctl(
-            'get', 'bgpconfig', 'default', '--export', '-o', 'yaml'
-        )
-    except CalledProcessError as e:
-        if b'resource does not exist' in e.output:
-            log('default BGPConfiguration does not exist')
-            output = None
-        else:
-            log(traceback.format_exc())
-            status_set('waiting', 'Waiting to retry BGP global configuration')
-            return
 
-    if output:
-        bgp_config = yaml.safe_load(output)
-    else:
-        bgp_config = {
-            'apiVersion': 'projectcalico.org/v3',
-            'kind': 'BGPConfiguration',
-            'metadata': {
-                'name': 'default'
-            },
-            'spec': {}
-        }
-
-    config = hookenv.config()
-    bgp_config['spec']['asNumber'] = config['global-as-number']
-    path = '/tmp/bgp-configuration.yml'
-    with open(path, 'w') as f:
-        yaml.dump(bgp_config, f)
     try:
-        calicoctl('apply', '-f', path)
+        try:
+            bgp_config = calicoctl_get('bgpconfig', 'default')
+        except CalledProcessError as e:
+            if b'resource does not exist' in e.output:
+                log('default BGPConfiguration does not exist')
+                bgp_config = {
+                    'apiVersion': 'projectcalico.org/v3',
+                    'kind': 'BGPConfiguration',
+                    'metadata': {
+                        'name': 'default'
+                    },
+                    'spec': {}
+                }
+            else:
+                raise
+
+        config = hookenv.config()
+        bgp_config['spec']['asNumber'] = config['global-as-number']
+        calicoctl_apply(bgp_config)
     except CalledProcessError:
         log(traceback.format_exc())
         status_set('waiting', 'Waiting to retry BGP global configuration')
@@ -417,8 +406,35 @@ def reconfigure_bgp_globals():
     remove_state('calico.bgp.globals.configured')
 
 
+@when('calico.binaries.installed', 'etcd.available',
+      'leadership.set.calico-v3-data-ready')
+@when_not('calico.node.configured')
+def configure_node():
+    status_set('maintenance', 'Configuring Calico node')
+
+    node_name = gethostname()
+    as_number = get_unit_as_number()
+
+    try:
+        node = calicoctl_get('node', node_name)
+        node['spec']['bgp']['asNumber'] = as_number
+        calicoctl_apply(node)
+    except CalledProcessError:
+        log(traceback.format_exc())
+        status_set('waiting', 'Waiting to retry Calico node configuration')
+        return
+
+    set_state('calico.node.configured')
+
+
+@when_any('config.changed.subnet-as-numbers', 'config.changed.unit-as-numbers')
+def reconfigure_node():
+    remove_state('calico.node.configured')
+
+
 @when('calico.service.installed', 'calico.pool.configured',
-      'calico.cni.configured', 'calico.bgp.globals.configured')
+      'calico.cni.configured', 'calico.bgp.globals.configured',
+      'calico.node.configured')
 @when_any('cni.is-master', 'calico.npc.deployed')
 def ready():
     if not service_running('calico-node'):
@@ -438,6 +454,20 @@ def calicoctl(*args):
         raise
 
 
+def calicoctl_get(*args):
+    args = ['get', '-o', 'yaml', '--export'] + list(args)
+    output = calicoctl(*args)
+    result = yaml.safe_load(output)
+    return result
+
+
+def calicoctl_apply(data):
+    path = '/tmp/calicoctl-apply.yaml'
+    with open(path, 'w') as f:
+        yaml.dump(data, f)
+    calicoctl('apply', '-f', path)
+
+
 def kubectl(*args):
     cmd = ['kubectl', '--kubeconfig=/root/.kube/config'] + list(args)
     try:
@@ -455,3 +485,29 @@ def get_calicoctl_env():
     env['ETCD_CERT_FILE'] = ETCD_CERT_PATH
     env['ETCD_CA_CERT_FILE'] = ETCD_CA_PATH
     return env
+
+
+def get_unit_as_number():
+    config = hookenv.config()
+
+    # Check for matching unit rule
+    unit_id = int(hookenv.local_unit().split('/')[1])
+    unit_as_numbers = yaml.safe_load(config['unit-as-numbers'])
+    if unit_id in unit_as_numbers:
+        as_number = unit_as_numbers[unit_id]
+        return as_number
+
+    # Check for matching subnet rule
+    ip_address = get_bind_address()
+    ip_address = ipaddress.ip_address(ip_address)  # IP address
+    subnet_as_numbers = yaml.safe_load(config['subnet-as-numbers'])
+    subnets = [ipaddress.ip_network(subnet) for subnet in subnet_as_numbers]
+    subnets = [subnet for subnet in subnets if ip_address in subnet]
+    if subnets:
+        subnets.sort(key=lambda subnet: -subnet.prefixlen)
+        subnet = subnets[0]
+        as_number = subnet_as_numbers[str(subnet)]
+        return as_number
+
+    # No AS number specified for this unit.
+    return None
