@@ -372,6 +372,7 @@ def deploy_network_policy_controller():
 @when_not('calico.bgp.globals.configured')
 def configure_bgp_globals():
     status_set('maintenance', 'Configuring BGP globals')
+    config = hookenv.config()
 
     try:
         try:
@@ -390,8 +391,9 @@ def configure_bgp_globals():
             else:
                 raise
 
-        config = hookenv.config()
-        bgp_config['spec']['asNumber'] = config['global-as-number']
+        spec = bgp_config['spec']
+        spec['asNumber'] = config['global-as-number']
+        spec['nodeToNodeMeshEnabled'] = config['node-to-node-mesh']
         calicoctl_apply(bgp_config)
     except CalledProcessError:
         log(traceback.format_exc())
@@ -401,7 +403,8 @@ def configure_bgp_globals():
     set_state('calico.bgp.globals.configured')
 
 
-@when_any('config.changed.global-as-number')
+@when_any('config.changed.global-as-number',
+          'config.changed.node-to-node-mesh')
 def reconfigure_bgp_globals():
     remove_state('calico.bgp.globals.configured')
 

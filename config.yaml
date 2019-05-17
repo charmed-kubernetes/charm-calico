@@ -65,3 +65,9 @@ options:
       Example value: "{0: 64512, 1: 64513}"
 
       This takes precedence over global-as-number and subnet-as-numbers.
+  node-to-node-mesh:
+    type: boolean
+    default: true
+    description: |
+      When enabled, each Calico node will peer with every other Calico node in
+      the cluster.
