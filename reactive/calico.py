@@ -1,11 +1,11 @@
 import os
 import traceback
 import yaml
+from conctl import getContainerRuntimeCtl
 from socket import gethostname
 from subprocess import check_call, check_output, CalledProcessError
 
 import calico_upgrade
-from calico_common import arch
 from charms.leadership import leader_get, leader_set
 from charms.reactive import when, when_not, when_any, set_state, remove_state
 from charms.reactive import hook
@@ -13,7 +13,8 @@ from charms.reactive import endpoint_from_flag
 from charmhelpers.core import hookenv
 from charmhelpers.core.hookenv import log, status_set, resource_get, \
     unit_private_ip, is_leader
-from charmhelpers.core.host import service, service_restart, service_running
+from charmhelpers.core.host import (arch, service, service_restart,
+                                    service_running)
 from charmhelpers.core.templating import render
 
 # TODO:
@@ -21,6 +22,7 @@ from charmhelpers.core.templating import render
 
 os.environ['PATH'] += os.pathsep + os.path.join(os.sep, 'snap', 'bin')
 
+CTL = ctl = getContainerRuntimeCtl()
 CALICOCTL_PATH = '/opt/calicoctl'
 ETCD_KEY_PATH = os.path.join(CALICOCTL_PATH, 'etcd-key')
 ETCD_CERT_PATH = os.path.join(CALICOCTL_PATH, 'etcd-cert')
@@ -37,6 +39,7 @@ def upgrade_charm():
     remove_state('calico.pool.configured')
     remove_state('calico.cni.configured')
     remove_state('calico.npc.deployed')
+    remove_state('calico.image.pulled')
     try:
         log('Deleting /etc/cni/net.d/10-calico.conf')
         os.remove('/etc/cni/net.d/10-calico.conf')
@@ -362,6 +365,19 @@ def calicoctl(*args):
     except CalledProcessError as e:
         log(e.output)
         raise
+
+
+@when_not('calico.image.pulled')
+def pull_calico_node_image():
+    status_set('maintenance', 'Pulling calico-node image')
+    image = hookenv.config('calico-node-image')
+    CTL.pull(image)
+    set_state('calico.image.pulled')
+
+
+@when_any('config.changed.calico-node-image')
+def repull_calico_node_image():
+    remove_state('calico.image.pulled')
 
 
 def kubectl(*args):

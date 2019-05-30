@@ -6,6 +6,7 @@ maintainers:
   - Konstantinos Tsakalozos <kos.tsakalozos@canonical.com>
   - Mike Wilson <mike.wilson@canonical.com>
   - Kevin Monroe <kevin.monroe@canonical.com>
+  - Joe Borg <joseph.borg@canonical.com>
 description: |
   Deploys Calico as a background service and configures CNI for use with
   calico on any principal charm that implements the kubernetes-cni interface.
