@@ -22,7 +22,13 @@ from charmhelpers.core.templating import render
 
 os.environ['PATH'] += os.pathsep + os.path.join(os.sep, 'snap', 'bin')
 
-CTL = ctl = getContainerRuntimeCtl()
+try:
+    CTL = getContainerRuntimeCtl()
+    set_state('calico.ctl.ready')
+except RuntimeError:
+    log(traceback.format_exc())
+    remove_state('calico.ctl.ready')
+
 CALICOCTL_PATH = '/opt/calicoctl'
 ETCD_KEY_PATH = os.path.join(CALICOCTL_PATH, 'etcd-key')
 ETCD_CERT_PATH = os.path.join(CALICOCTL_PATH, 'etcd-cert')
@@ -368,6 +374,7 @@ def calicoctl(*args):
 
 
 @when_not('calico.image.pulled')
+@when('calico.ctl.ready')
 def pull_calico_node_image():
     status_set('maintenance', 'Pulling calico-node image')
     image = hookenv.config('calico-node-image')
