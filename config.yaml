@@ -71,3 +71,30 @@ options:
     description: |
       When enabled, each Calico node will peer with every other Calico node in
       the cluster.
+  global-bgp-peers:
+    type: string
+    default: "[]"
+    description: |
+      List of global BGP peers. Each BGP peer is specified with an address and
+      an as-number.
+
+      Example value: "[{address: 10.0.0.1, as-number: 65000}, {address: 10.0.0.2, as-number: 65001}]"
+  subnet-bgp-peers:
+    type: string
+    default: "{}"
+    description: |
+      Mapping of subnets to lists of BGP peers. Each BGP peer is specified with
+      an address and an as-number.
+
+      Example value: "{10.0.0.0/24: [{address: 10.0.0.1, as-number: 65000}, {address: 10.0.0.2, as-number: 65001}], 10.0.1.0/24: [{address: 10.0.1.1, as-number: 65002}]}"
+
+      If a node's IP matches multiple subnets, then peerings will be added for
+      each matched subnet.
+  unit-bgp-peers:
+    type: string
+    default: "{}"
+    description: |
+      Mapping of unit IDs to lists of BGP peers. Each BGP peer is specified
+      with an address and an as-number.
+
+      Example value: "{0: [{address: 10.0.0.1, as-number: 65000}, {address: 10.0.0.2, as-number: 65001}], 1: [{address: 10.0.1.1, as-number: 65002}]}"
