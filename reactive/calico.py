@@ -277,7 +277,7 @@ def configure_calico_pool():
     context = {
         'cidr': CALICO_CIDR,
         'ipip': config['ipip'],
-        'nat_outgoing': 'true' if config['nat-outgoing'] else 'false',
+        'nat_outgoing': 'true' if config['nat-outgoing'] else 'false'
     }
     render('pool.yaml', '/tmp/calico-pool.yaml', context)
     try:
