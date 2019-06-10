@@ -418,10 +418,13 @@ def configure_node():
 
     node_name = gethostname()
     as_number = get_unit_as_number()
+    route_reflector_cluster_id = get_route_reflector_cluster_id()
 
     try:
         node = calicoctl_get('node', node_name)
         node['spec']['bgp']['asNumber'] = as_number
+        node['spec']['bgp']['routeReflectorClusterID'] = \
+            route_reflector_cluster_id
         calicoctl_apply(node)
     except CalledProcessError:
         log(traceback.format_exc())
@@ -431,7 +434,8 @@ def configure_node():
     set_state('calico.node.configured')
 
 
-@when_any('config.changed.subnet-as-numbers', 'config.changed.unit-as-numbers')
+@when_any('config.changed.subnet-as-numbers', 'config.changed.unit-as-numbers',
+          'config.changed.route-reflector-cluster-ids')
 def reconfigure_node():
     remove_state('calico.node.configured')
 
@@ -598,3 +602,12 @@ def filter_local_subnets(subnets):
 
 def get_unit_id():
     return int(hookenv.local_unit().split('/')[1])
+
+
+def get_route_reflector_cluster_id():
+    config = hookenv.config()
+    route_reflector_cluster_ids = yaml.safe_load(
+        config['route-reflector-cluster-ids']
+    )
+    unit_id = get_unit_id()
+    return route_reflector_cluster_ids.get(unit_id)
