@@ -1,20 +1,32 @@
 import os
-import traceback
 import yaml
+import gzip
+import traceback
+import calico_upgrade
+
 from conctl import getContainerRuntimeCtl
 from socket import gethostname
 from subprocess import check_call, check_output, CalledProcessError
 
-import calico_upgrade
 from charms.leadership import leader_get, leader_set
 from charms.reactive import when, when_not, when_any, set_state, remove_state
 from charms.reactive import hook
 from charms.reactive import endpoint_from_flag
-from charmhelpers.core import hookenv
-from charmhelpers.core.hookenv import log, status_set, resource_get, \
-    unit_private_ip, is_leader
-from charmhelpers.core.host import (arch, service, service_restart,
-                                    service_running)
+from charmhelpers.core.hookenv import (
+    log,
+    status_set,
+    resource_get,
+    network_get,
+    unit_private_ip,
+    is_leader,
+    config as charm_config
+)
+from charmhelpers.core.host import (
+    arch,
+    service,
+    service_restart,
+    service_running
+)
 from charmhelpers.core.templating import render
 
 # TODO:
@@ -197,7 +209,7 @@ def install_etcd_credentials():
 def get_bind_address():
     ''' Returns a non-fan bind address for the cni endpoint '''
     try:
-        data = hookenv.network_get('cni')
+        data = network_get('cni')
     except NotImplementedError:
         # Juju < 2.1
         return unit_private_ip()
@@ -235,7 +247,7 @@ def install_calico_service():
         'nodename': gethostname(),
         # specify IP so calico doesn't grab a silly one from, say, lxdbr0
         'ip': get_bind_address(),
-        'calico_node_image': hookenv.config('calico-node-image')
+        'calico_node_image': charm_config('calico-node-image')
     })
     check_call(['systemctl', 'daemon-reload'])
     service_restart('calico-node')
@@ -273,7 +285,7 @@ def configure_calico_pool():
             return
 
     # configure the default pool
-    config = hookenv.config()
+    config = charm_config()
     context = {
         'cidr': CALICO_CIDR,
         'ipip': config['ipip'],
@@ -337,7 +349,7 @@ def deploy_network_policy_controller():
         'etcd_key_path': ETCD_KEY_PATH,
         'etcd_cert_path': ETCD_CERT_PATH,
         'etcd_ca_path': ETCD_CA_PATH,
-        'calico_policy_image': hookenv.config('calico-policy-image')
+        'calico_policy_image': charm_config('calico-policy-image')
     }
     render('policy-controller.yaml', '/tmp/policy-controller.yaml', context)
     try:
@@ -376,9 +388,20 @@ def calicoctl(*args):
 @when_not('calico.image.pulled')
 @when('calico.ctl.ready')
 def pull_calico_node_image():
-    status_set('maintenance', 'Pulling calico-node image')
-    image = hookenv.config('calico-node-image')
-    CTL.pull(image)
+    image = resource_get('calico-node-image')
+
+    if not image or os.path.getsize(image) == 0:
+        status_set('maintenance', 'Pulling calico-node image')
+        image = charm_config('calico-node-image')
+        CTL.pull(image)
+    else:
+        status_set('maintenance', 'Loading calico-node image')
+        unzipped = '/tmp/calico-node-image.tar'
+        with gzip.open(image, 'rb') as f_in:
+            with open(unzipped, 'wb') as f_out:
+                f_out.write(f_in.read())
+        CTL.load(unzipped)
+
     set_state('calico.image.pulled')
 
 
