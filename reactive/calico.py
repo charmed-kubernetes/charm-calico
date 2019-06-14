@@ -408,6 +408,7 @@ def pull_calico_node_image():
 @when_any('config.changed.calico-node-image')
 def repull_calico_node_image():
     remove_state('calico.image.pulled')
+    remove_state('calico.service.installed')
 
 
 def kubectl(*args):
