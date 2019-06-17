@@ -20,3 +20,92 @@ options:
     default: true
     description: |
       NAT outgoing traffic
+  cidr:
+    type: string
+    default: "192.168.0.0/16"
+    description: |
+      Network CIDR assigned to Calico. This is applied to the default Calico
+      pool, and is also communicated to the Kubernetes charms for use in
+      kube-proxy configuration.
+  manage-pools:
+    type: boolean
+    default: true
+    description: |
+      If true, a default pool is created using the cidr and ipip charm
+      configuration values.
+
+      Warning: When manage-pools is enabled, the charm will delete any pools
+      that are unrecognized.
+  global-as-number:
+    type: int
+    default: 64512
+    description: |
+      Global AS number.
+  subnet-as-numbers:
+    type: string
+    default: "{}"
+    description: |
+      Mapping of subnets to AS numbers, specified as YAML. Each Calico node
+      will be assigned an AS number based on the entries in this mapping.
+
+      Example value: "{10.0.0.0/24: 64512, 10.0.1.0/24: 64513}"
+
+      If a node's IP matches any of the specified subnets, then the
+      corresponding AS number is used instead of the global one.
+
+      If a node's IP matches no subnets, then the global AS number will be
+      used instead.
+
+      If a node's IP matches multiple subnets, then the most specific subnet
+      will be used, e.g. a /24 subnet will take precedence over a /16.
+  unit-as-numbers:
+    type: string
+    default: "{}"
+    description: |
+      Mapping of unit IDs to AS numbers, specified as YAML. Each Calico node
+      will be assigned an AS number based on the entries in this mapping.
+
+      Example value: "{0: 64512, 1: 64513}"
+
+      This takes precedence over global-as-number and subnet-as-numbers.
+  node-to-node-mesh:
+    type: boolean
+    default: true
+    description: |
+      When enabled, each Calico node will peer with every other Calico node in
+      the cluster.
+  global-bgp-peers:
+    type: string
+    default: "[]"
+    description: |
+      List of global BGP peers. Each BGP peer is specified with an address and
+      an as-number.
+
+      Example value: "[{address: 10.0.0.1, as-number: 65000}, {address: 10.0.0.2, as-number: 65001}]"
+  subnet-bgp-peers:
+    type: string
+    default: "{}"
+    description: |
+      Mapping of subnets to lists of BGP peers. Each BGP peer is specified with
+      an address and an as-number.
+
+      Example value: "{10.0.0.0/24: [{address: 10.0.0.1, as-number: 65000}, {address: 10.0.0.2, as-number: 65001}], 10.0.1.0/24: [{address: 10.0.1.1, as-number: 65002}]}"
+
+      If a node's IP matches multiple subnets, then peerings will be added for
+      each matched subnet.
+  unit-bgp-peers:
+    type: string
+    default: "{}"
+    description: |
+      Mapping of unit IDs to lists of BGP peers. Each BGP peer is specified
+      with an address and an as-number.
+
+      Example value: "{0: [{address: 10.0.0.1, as-number: 65000}, {address: 10.0.0.2, as-number: 65001}], 1: [{address: 10.0.1.1, as-number: 65002}]}"
+  route-reflector-cluster-ids:
+    type: string
+    default: "{}"
+    description: |
+      Mapping of unit IDs to route reflector cluster IDs. Assigning a route
+      reflector cluster ID allows the node to function as a route reflector.
+
+      Example value: "{0: 224.0.0.1, 2: 224.0.0.1}"
