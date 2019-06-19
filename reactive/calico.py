@@ -1,8 +1,8 @@
-import ipaddress
 import os
 import yaml
 import gzip
 import traceback
+import ipaddress
 import calico_upgrade
 
 from conctl import getContainerRuntimeCtl
@@ -284,15 +284,6 @@ def configure_calico_pool():
         return
 
     status_set('maintenance', 'Configuring Calico IP pool')
-
-    # configure the default pool
-    config = charm_config()
-    context = {
-        'cidr': CALICO_CIDR,
-        'ipip': config['ipip'],
-        'nat_outgoing': 'true' if config['nat-outgoing'] else 'false'
-    }
-    render('pool.yaml', '/tmp/calico-pool.yaml', context)
 
     try:
         # remove unrecognized pools, and default pool if CIDR doesn't match
