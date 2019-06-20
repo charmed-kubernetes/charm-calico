@@ -1,26 +1,47 @@
-import ipaddress
 import os
-import traceback
 import yaml
+import gzip
+import traceback
+import ipaddress
+import calico_upgrade
+
+from conctl import getContainerRuntimeCtl
 from socket import gethostname
 from subprocess import check_call, check_output, CalledProcessError
 
-import calico_upgrade
-from calico_common import arch
 from charms.leadership import leader_get, leader_set
 from charms.reactive import when, when_not, when_any, set_state, remove_state
 from charms.reactive import hook
 from charms.reactive import endpoint_from_flag
-from charmhelpers.core import hookenv
-from charmhelpers.core.hookenv import log, status_set, resource_get, \
-    unit_private_ip, is_leader
-from charmhelpers.core.host import service, service_restart, service_running
+from charmhelpers.core.hookenv import (
+    log,
+    status_set,
+    resource_get,
+    network_get,
+    unit_private_ip,
+    is_leader,
+    local_unit,
+    config as charm_config
+)
+from charmhelpers.core.host import (
+    arch,
+    service,
+    service_restart,
+    service_running
+)
 from charmhelpers.core.templating import render
 
 # TODO:
 #   - Handle the 'stop' hook by stopping and uninstalling all the things.
 
 os.environ['PATH'] += os.pathsep + os.path.join(os.sep, 'snap', 'bin')
+
+try:
+    CTL = getContainerRuntimeCtl()
+    set_state('calico.ctl.ready')
+except RuntimeError:
+    log(traceback.format_exc())
+    remove_state('calico.ctl.ready')
 
 CALICOCTL_PATH = '/opt/calicoctl'
 ETCD_KEY_PATH = os.path.join(CALICOCTL_PATH, 'etcd-key')
@@ -36,6 +57,7 @@ def upgrade_charm():
     remove_state('calico.service.installed')
     remove_state('calico.pool.configured')
     remove_state('calico.npc.deployed')
+    remove_state('calico.image.pulled')
     remove_state('calico.bgp.globals.configured')
     remove_state('calico.node.configured')
     remove_state('calico.bgp.peers.configured')
@@ -203,7 +225,7 @@ def install_etcd_credentials():
 def get_bind_address():
     ''' Returns a non-fan bind address for the cni endpoint '''
     try:
-        data = hookenv.network_get('cni')
+        data = network_get('cni')
     except NotImplementedError:
         # Juju < 2.1
         return unit_private_ip()
@@ -241,7 +263,7 @@ def install_calico_service():
         'nodename': gethostname(),
         # specify IP so calico doesn't grab a silly one from, say, lxdbr0
         'ip': get_bind_address(),
-        'calico_node_image': hookenv.config('calico-node-image')
+        'calico_node_image': charm_config('calico-node-image')
     })
     check_call(['systemctl', 'daemon-reload'])
     service_restart('calico-node')
@@ -255,7 +277,7 @@ def install_calico_service():
 @when_not('calico.pool.configured')
 def configure_calico_pool():
     ''' Configure Calico IP pool. '''
-    config = hookenv.config()
+    config = charm_config()
     if not config['manage-pools']:
         log('Skipping pool configuration')
         set_state('calico.pool.configured')
@@ -324,7 +346,7 @@ def configure_cni():
         'kubeconfig_path': cni_config['kubeconfig_path']
     }
     render('10-calico.conflist', '/etc/cni/net.d/10-calico.conflist', context)
-    config = hookenv.config()
+    config = charm_config()
     cni.set_config(cidr=config['cidr'])
     set_state('calico.cni.configured')
 
@@ -334,7 +356,7 @@ def configure_cni():
 def configure_master_cni():
     status_set('maintenance', 'Configuring Calico CNI')
     cni = endpoint_from_flag('cni.is-master')
-    config = hookenv.config()
+    config = charm_config()
     cni.set_config(cidr=config['cidr'])
     set_state('calico.cni.configured')
 
@@ -357,7 +379,7 @@ def deploy_network_policy_controller():
         'etcd_key_path': ETCD_KEY_PATH,
         'etcd_cert_path': ETCD_CERT_PATH,
         'etcd_ca_path': ETCD_CA_PATH,
-        'calico_policy_image': hookenv.config('calico-policy-image')
+        'calico_policy_image': charm_config('calico-policy-image')
     }
     render('policy-controller.yaml', '/tmp/policy-controller.yaml', context)
     try:
@@ -373,7 +395,7 @@ def deploy_network_policy_controller():
 @when_not('calico.bgp.globals.configured')
 def configure_bgp_globals():
     status_set('maintenance', 'Configuring BGP globals')
-    config = hookenv.config()
+    config = charm_config()
 
     try:
         try:
@@ -449,7 +471,7 @@ def configure_bgp_peers():
     peers = []
 
     # Global BGP peers
-    config = hookenv.config()
+    config = charm_config()
     peers += yaml.safe_load(config['global-bgp-peers'])
 
     # Subnet-scoped BGP peers
@@ -465,7 +487,7 @@ def configure_bgp_peers():
         peers += unit_bgp_peers[unit_id]
 
     # Give names to peers
-    safe_unit_name = hookenv.local_unit().replace('/', '-')
+    safe_unit_name = local_unit().replace('/', '-')
     named_peers = {
         # name must consist of lower case alphanumeric characters, '-' or '.'
         '%s-%s-%s' % (safe_unit_name, peer['address'], peer['as-number']): peer
@@ -536,6 +558,32 @@ def calicoctl(*args):
         raise
 
 
+@when_not('calico.image.pulled')
+@when('calico.ctl.ready')
+def pull_calico_node_image():
+    image = resource_get('calico-node-image')
+
+    if not image or os.path.getsize(image) == 0:
+        status_set('maintenance', 'Pulling calico-node image')
+        image = charm_config('calico-node-image')
+        CTL.pull(image)
+    else:
+        status_set('maintenance', 'Loading calico-node image')
+        unzipped = '/tmp/calico-node-image.tar'
+        with gzip.open(image, 'rb') as f_in:
+            with open(unzipped, 'wb') as f_out:
+                f_out.write(f_in.read())
+        CTL.load(unzipped)
+
+    set_state('calico.image.pulled')
+
+
+@when_any('config.changed.calico-node-image')
+def repull_calico_node_image():
+    remove_state('calico.image.pulled')
+    remove_state('calico.service.installed')
+
+
 def calicoctl_get(*args):
     args = ['get', '-o', 'yaml', '--export'] + list(args)
     output = calicoctl(*args)
@@ -570,7 +618,7 @@ def get_calicoctl_env():
 
 
 def get_unit_as_number():
-    config = hookenv.config()
+    config = charm_config()
 
     # Check for matching unit rule
     unit_id = get_unit_id()
@@ -601,11 +649,11 @@ def filter_local_subnets(subnets):
 
 
 def get_unit_id():
-    return int(hookenv.local_unit().split('/')[1])
+    return int(local_unit().split('/')[1])
 
 
 def get_route_reflector_cluster_id():
-    config = hookenv.config()
+    config = charm_config()
     route_reflector_cluster_ids = yaml.safe_load(
         config['route-reflector-cluster-ids']
     )

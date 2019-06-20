@@ -6,6 +6,7 @@ maintainers:
   - Konstantinos Tsakalozos <kos.tsakalozos@canonical.com>
   - Mike Wilson <mike.wilson@canonical.com>
   - Kevin Monroe <kevin.monroe@canonical.com>
+  - Joe Borg <joseph.borg@canonical.com>
 description: |
   Deploys Calico as a background service and configures CNI for use with
   calico on any principal charm that implements the kubernetes-cni interface.
@@ -38,3 +39,7 @@ resources:
     type: file
     filename: calico-upgrade.tar.gz
     description: 'calico-upgrade tool for arm64'
+  calico-node-image:
+    type: file
+    filename: calico-node-image.tar.gz
+    description: 'calico-node container image'
