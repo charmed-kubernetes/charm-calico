@@ -96,3 +96,5 @@ done
 
 # calico-upgrade arm64
 rm -rf resource-build-upgrade-arm64
+
+touch calico-node-image.tar.gz
