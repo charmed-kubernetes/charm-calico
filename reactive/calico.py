@@ -235,6 +235,7 @@ def check_etcd_changes():
                                      ETCD_CERT_PATH,
                                      ETCD_CA_PATH)
         remove_state('calico.service.installed')
+        remove_state('calico.npc.deployed')
 
 
 def get_bind_address():
@@ -394,7 +395,8 @@ def deploy_network_policy_controller():
         'etcd_key_path': ETCD_KEY_PATH,
         'etcd_cert_path': ETCD_CERT_PATH,
         'etcd_ca_path': ETCD_CA_PATH,
-        'calico_policy_image': charm_config('calico-policy-image')
+        'calico_policy_image': charm_config('calico-policy-image'),
+        'etcd_cert_last_modified': os.path.getmtime(ETCD_CERT_PATH)
     }
     render('policy-controller.yaml', '/tmp/policy-controller.yaml', context)
     try:
