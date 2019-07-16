@@ -13,6 +13,7 @@ from charms.leadership import leader_get, leader_set
 from charms.reactive import when, when_not, when_any, set_state, remove_state
 from charms.reactive import hook
 from charms.reactive import endpoint_from_flag
+from charms.reactive import data_changed
 from charmhelpers.core.hookenv import (
     log,
     status_set,
@@ -219,7 +220,22 @@ def blocked_without_etcd():
 def install_etcd_credentials():
     etcd = endpoint_from_flag('etcd.available')
     etcd.save_client_credentials(ETCD_KEY_PATH, ETCD_CERT_PATH, ETCD_CA_PATH)
+    # register initial etcd data so that we can detect changes
+    data_changed('calico.etcd.data', (etcd.get_connection_string(),
+                                      etcd.get_client_credentials()))
     set_state('calico.etcd-credentials.installed')
+
+
+@when('etcd.tls.available', 'calico.service.installed')
+def check_etcd_changes():
+    etcd = endpoint_from_flag('etcd.available')
+    if data_changed('calico.etcd.data', (etcd.get_connection_string(),
+                                         etcd.get_client_credentials())):
+        etcd.save_client_credentials(ETCD_KEY_PATH,
+                                     ETCD_CERT_PATH,
+                                     ETCD_CA_PATH)
+        remove_state('calico.service.installed')
+        remove_state('calico.npc.deployed')
 
 
 def get_bind_address():
@@ -379,7 +395,8 @@ def deploy_network_policy_controller():
         'etcd_key_path': ETCD_KEY_PATH,
         'etcd_cert_path': ETCD_CERT_PATH,
         'etcd_ca_path': ETCD_CA_PATH,
-        'calico_policy_image': charm_config('calico-policy-image')
+        'calico_policy_image': charm_config('calico-policy-image'),
+        'etcd_cert_last_modified': os.path.getmtime(ETCD_CERT_PATH)
     }
     render('policy-controller.yaml', '/tmp/policy-controller.yaml', context)
     try:

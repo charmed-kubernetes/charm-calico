@@ -111,6 +111,7 @@ metadata:
   namespace: kube-system
   labels:
     k8s-app: calico-kube-controllers
+    cdk-restart-on-ca-change: "true"
 spec:
   # Only a single instance of the this pod should be
   # active at a time.  Since this pod is run as a Deployment,
@@ -125,6 +126,10 @@ spec:
       namespace: kube-system
       labels:
         k8s-app: calico-kube-controllers
+      annotations:
+        # annotate etcd cert modification time, so that when it changes, k8s
+        # will restart the pod
+        cdk-etcd-cert-last-modified: "{{ etcd_cert_last_modified }}"
     spec:
       hostNetwork: true
       serviceAccountName: calico-kube-controllers
