@@ -14,17 +14,21 @@ rules:
   # Pods are monitored for changing labels.
   # The node controller monitors Kubernetes nodes.
   # Namespace and serviceaccount labels are used for policy.
-  - apiGroups: [""]
+  - apiGroups: 
+    - ""
+    - extensions
     resources:
       - pods
       - nodes
       - namespaces
       - serviceaccounts
+      - networkpolicies
     verbs:
       - watch
       - list
   # Watch for changes to Kubernetes NetworkPolicies.
-  - apiGroups: ["networking.k8s.io"]
+  - apiGroups: 
+    - "networking.k8s.io"
     resources:
       - networkpolicies
     verbs:
@@ -52,7 +56,9 @@ metadata:
   name: calico-kube-controllers
 rules:
   # Nodes are watched to monitor for deletions.
-  - apiGroups: [""]
+  - apiGroups:
+    - ""
+    - extensions
     resources:
       - nodes
     verbs:
@@ -60,7 +66,9 @@ rules:
       - list
       - get
   # Pods are queried to check for existence.
-  - apiGroups: [""]
+  - apiGroups:
+    - ""
+    - extensions
     resources:
       - pods
     verbs:
@@ -152,3 +160,36 @@ spec:
         - name: calicoctl
           hostPath:
             path: /opt/calicoctl
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: calico-node
+rules:
+  - apiGroups: 
+    - ""
+    resources:
+      - pods
+      - nodes
+      - namespaces
+    verbs:
+      - get
+  - apiGroups: 
+    - ""
+    resources:
+      - nodes/status
+    verbs:
+      - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: calico-node
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: calico-node
+subjects:
+- kind: ServiceAccount
+  name: calico-node
+  namespace: kube-system
