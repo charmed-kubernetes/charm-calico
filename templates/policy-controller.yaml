@@ -128,3 +128,12 @@ subjects:
 - kind: ServiceAccount
   name: calico-node
   namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: namespace-reader
+rules:
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get"]
