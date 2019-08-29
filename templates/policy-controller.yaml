@@ -47,7 +47,7 @@ subjects:
   name: calico-kube-controllers
   namespace: kube-system
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: calico-kube-controllers
@@ -60,6 +60,9 @@ spec:
   # active at a time.  Since this pod is run as a Deployment,
   # Kubernetes will ensure the pod is recreated in case of failure,
   # removing the need for passive backups.
+  selector:
+    matchLabels:
+      k8s-app: calico-kube-controllers
   replicas: 1
   strategy:
     type: Recreate
