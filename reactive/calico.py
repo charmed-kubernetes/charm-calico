@@ -11,7 +11,7 @@ from subprocess import check_call, check_output, CalledProcessError
 
 from charms.leadership import leader_get, leader_set
 from charms.reactive import when, when_not, when_any, set_state, remove_state
-from charms.reactive import hook
+from charms.reactive import hook, is_state
 from charms.reactive import endpoint_from_flag
 from charms.reactive import data_changed
 from charmhelpers.core.hookenv import (
@@ -22,7 +22,8 @@ from charmhelpers.core.hookenv import (
     unit_private_ip,
     is_leader,
     local_unit,
-    config as charm_config
+    config as charm_config,
+    atexit
 )
 from charmhelpers.core.host import (
     arch,
@@ -383,7 +384,7 @@ def reconfigure_cni():
 
 
 @when('etcd.available', 'calico.cni.configured',
-      'calico.service.installed', 'cni.is-worker',
+      'calico.service.installed', 'leadership.is_leader',
       'leadership.set.calico-v3-data-ready')
 @when_not('calico.npc.deployed')
 def deploy_network_policy_controller():
@@ -553,15 +554,23 @@ def reconfigure_bgp_peers():
     remove_state('calico.bgp.peers.configured')
 
 
-@when('calico.service.installed', 'calico.pool.configured',
-      'calico.cni.configured', 'calico.bgp.globals.configured',
-      'calico.node.configured', 'calico.bgp.peers.configured')
-@when_any('cni.is-master', 'calico.npc.deployed')
+@atexit
 def ready():
+    preconditions = [
+        'calico.service.installed', 'calico.pool.configured',
+        'calico.cni.configured', 'calico.bgp.globals.configured',
+        'calico.node.configured', 'calico.bgp.peers.configured'
+    ]
+    for precondition in preconditions:
+        if not is_state(precondition):
+            return
+    if is_leader() and not is_state('calico.npc.deployed'):
+        status_set('waiting', 'Waiting to retry deploying policy controller')
+        return
     if not service_running('calico-node'):
         status_set('waiting', 'Waiting for service: calico-node')
-    else:
-        status_set('active', 'Calico is active')
+        return
+    status_set('active', 'Calico is active')
 
 
 def calicoctl(*args):
