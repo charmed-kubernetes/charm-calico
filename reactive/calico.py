@@ -23,7 +23,8 @@ from charmhelpers.core.hookenv import (
     is_leader,
     local_unit,
     config as charm_config,
-    atexit
+    atexit,
+    env_proxy_settings
 )
 from charmhelpers.core.host import (
     arch,
@@ -584,6 +585,22 @@ def calicoctl(*args):
         raise
 
 
+def set_http_proxy():
+    """
+    Check if we have any values for
+    juju_http*_proxy and apply them.
+    """
+    juju_environment = env_proxy_settings()
+    if juju_environment and not juju_environment.get('disable-juju-proxy'):
+        upper = ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY']
+        lower = list(map(str.lower, upper))
+        keys = upper + lower
+        for key in keys:
+            from_juju = juju_environment.get(key, None)
+            if from_juju:
+                os.environ[key] = from_juju
+
+
 @when_not('calico.image.pulled')
 @when('calico.ctl.ready')
 def pull_calico_node_image():
@@ -592,6 +609,7 @@ def pull_calico_node_image():
     if not image or os.path.getsize(image) == 0:
         status_set('maintenance', 'Pulling calico-node image')
         image = charm_config('calico-node-image')
+        set_http_proxy()
         CTL.pull(image)
     else:
         status_set('maintenance', 'Loading calico-node image')
