@@ -7,7 +7,7 @@ import calico_upgrade
 
 from conctl import getContainerRuntimeCtl
 from socket import gethostname
-from subprocess import check_call, check_output, CalledProcessError
+from subprocess import check_call, check_output, CalledProcessError, STDOUT
 
 from charms.leadership import leader_get, leader_set
 from charms.reactive import when, when_not, when_any, set_state, remove_state
@@ -579,7 +579,7 @@ def calicoctl(*args):
     env = os.environ.copy()
     env.update(get_calicoctl_env())
     try:
-        return check_output(cmd, env=env)
+        return check_output(cmd, env=env, stderr=STDOUT)
     except CalledProcessError as e:
         log(e.output)
         raise
