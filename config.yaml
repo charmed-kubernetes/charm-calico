@@ -2,12 +2,12 @@ options:
   calico-node-image:
     type: string
     # Please refer to layer-canal/versioning.md before changing the version below.
-    default: rocks.canonical.com:443/cdk/calico/node:v3.6.1
+    default: rocks.canonical.com:443/cdk/calico/node:v3.10.1
     description: |
       The image id to use for calico/node.
   calico-policy-image:
     type: string
-    default: rocks.canonical.com:443/cdk/calico/kube-controllers:v3.6.1
+    default: rocks.canonical.com:443/cdk/calico/kube-controllers:v3.10.1
     description: |
       The image id to use for calico/kube-controllers.
   ipip:
