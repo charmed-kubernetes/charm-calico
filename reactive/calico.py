@@ -365,7 +365,7 @@ def configure_cni():
     }
     render('10-calico.conflist', '/etc/cni/net.d/10-calico.conflist', context)
     config = charm_config()
-    cni.set_config(cidr=config['cidr'])
+    cni.set_config(cidr=config['cidr'], cni_conf_file='10-calico.conflist')
     set_state('calico.cni.configured')
 
 
@@ -375,7 +375,7 @@ def configure_master_cni():
     status_set('maintenance', 'Configuring Calico CNI')
     cni = endpoint_from_flag('cni.is-master')
     config = charm_config()
-    cni.set_config(cidr=config['cidr'])
+    cni.set_config(cidr=config['cidr'], cni_conf_file='10-calico.conflist')
     set_state('calico.cni.configured')
 
 

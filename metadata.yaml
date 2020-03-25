@@ -16,6 +16,7 @@ subordinate: true
 series:
   - xenial
   - bionic
+  - focal
 requires:
   etcd:
     interface: etcd
