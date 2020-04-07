@@ -77,6 +77,11 @@ def upgrade_charm():
         })
 
 
+@hook('pre-series-upgrade')
+def pre_series_upgrade():
+    status_set('blocked', 'Series upgrade in progress')
+
+
 @when('leadership.is_leader', 'leadership.set.calico-v3-data-migration-needed',
       'etcd.available', 'calico.etcd-credentials.installed')
 def upgrade_v3_migrate_data():
