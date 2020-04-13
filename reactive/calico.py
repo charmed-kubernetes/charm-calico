@@ -567,6 +567,8 @@ def ready():
         'calico.cni.configured', 'calico.bgp.globals.configured',
         'calico.node.configured', 'calico.bgp.peers.configured'
     ]
+    if is_state('upgrade.series.in-progress'):
+        return
     for precondition in preconditions:
         if not is_state(precondition):
             return
