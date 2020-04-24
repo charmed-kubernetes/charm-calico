@@ -3,4 +3,5 @@ includes:
   - 'interface:kubernetes-cni'
   - 'layer:basic'
   - 'layer:leadership'
+  - 'layer:status'
 repo: https://github.com/juju-solutions/layer-calico.git
