@@ -240,6 +240,20 @@ def check_etcd_changes():
         remove_state('calico.npc.deployed')
 
 
+# overlay_interface stands for interfaces that are connected
+# directly to the pods. In Calico, they are prefixed as value set on
+# FELIX_INTERFACEPREFIX, which default is "cali..."
+def get_mtu(overlay_interface=False):
+    if not charm_config('veth-mtu'):
+        return None
+    if overlay_interface:
+        return charm_config('veth-mtu') if charm_config('ipip') == 'Never' \
+           else (charm_config('veth-mtu') - 50)
+    else:
+        return charm_config('veth-mtu')
+    return None
+
+
 def get_bind_address():
     ''' Returns a non-fan bind address for the cni endpoint '''
     try:
@@ -281,12 +295,20 @@ def install_calico_service():
         'nodename': gethostname(),
         # specify IP so calico doesn't grab a silly one from, say, lxdbr0
         'ip': get_bind_address(),
+        'mtu': get_mtu(overlay_interface=False),
         'calico_node_image': charm_config('calico-node-image')
     })
     check_call(['systemctl', 'daemon-reload'])
     service_restart('calico-node')
     service('enable', 'calico-node')
     set_state('calico.service.installed')
+
+
+@when('config.changed.veth-mtu')
+@when('calico.cni.configured', 'calico.service.installed')
+def configure_mtu():
+    remove_state('calico.service.installed')
+    remove_state('calico.cni.configured')
 
 
 @when('calico.binaries.installed', 'etcd.available',
@@ -361,7 +383,8 @@ def configure_cni():
         'etcd_key_path': ETCD_KEY_PATH,
         'etcd_cert_path': ETCD_CERT_PATH,
         'etcd_ca_path': ETCD_CA_PATH,
-        'kubeconfig_path': cni_config['kubeconfig_path']
+        'kubeconfig_path': cni_config['kubeconfig_path'],
+        'mtu': get_mtu(overlay_interface=True)
     }
     render('10-calico.conflist', '/etc/cni/net.d/10-calico.conflist', context)
     config = charm_config()
