@@ -287,6 +287,9 @@ def install_calico_service():
     etcd = endpoint_from_flag('etcd.available')
     service_path = os.path.join(os.sep, 'lib', 'systemd', 'system',
                                 'calico-node.service')
+    ip_versions = {net.version for net in get_networks(charm_config('cidr'))}
+    ip4 = get_bind_address() if 4 in ip_versions else "none"
+    ip6 = "autodetect" if 6 in ip_versions else "none"
     render('calico-node.service', service_path, {
         'connection_string': etcd.get_connection_string(),
         'etcd_key_path': ETCD_KEY_PATH,
@@ -294,7 +297,8 @@ def install_calico_service():
         'etcd_cert_path': ETCD_CERT_PATH,
         'nodename': gethostname(),
         # specify IP so calico doesn't grab a silly one from, say, lxdbr0
-        'ip': get_bind_address(),
+        'ip': ip4,
+        'ip6': ip6,
         'mtu': get_mtu(overlay_interface=False),
         'calico_node_image': charm_config('calico-node-image')
     })
@@ -329,31 +333,35 @@ def configure_calico_pool():
         # remove unrecognized pools, and default pool if CIDR doesn't match
         pools = calicoctl_get('pool')['items']
 
+        cidrs = tuple(cidr.strip() for cidr in config['cidr'].split(','))
+        names = tuple('ipv{}'.format(get_network(cidr).version)
+                      for cidr in cidrs)
         pool_names_to_delete = [
             pool['metadata']['name'] for pool in pools
-            if pool['metadata']['name'] != 'default'
-            or pool['spec']['cidr'] != config['cidr']
+            if pool['metadata']['name'] not in names
+            or pool['spec']['cidr'] not in cidrs
         ]
 
         for pool_name in pool_names_to_delete:
             log('Deleting pool: %s' % pool_name)
             calicoctl('delete', 'pool', pool_name, '--skip-not-exists')
 
-        # configure the default pool
-        pool = {
-            'apiVersion': 'projectcalico.org/v3',
-            'kind': 'IPPool',
-            'metadata': {
-                'name': 'default'
-            },
-            'spec': {
-                'cidr': config['cidr'],
-                'ipipMode': config['ipip'],
-                'natOutgoing': config['nat-outgoing']
+        for cidr, name in zip(cidrs, names):
+            # configure the default pool
+            pool = {
+                'apiVersion': 'projectcalico.org/v3',
+                'kind': 'IPPool',
+                'metadata': {
+                    'name': name,
+                },
+                'spec': {
+                    'cidr': cidr,
+                    'ipipMode': config['ipip'],
+                    'natOutgoing': config['nat-outgoing'],
+                }
             }
-        }
 
-        calicoctl_apply(pool)
+            calicoctl_apply(pool)
     except CalledProcessError:
         log(traceback.format_exc())
         status.waiting('Waiting to retry calico pool configuration')
@@ -378,13 +386,16 @@ def configure_cni():
     etcd = endpoint_from_flag('etcd.available')
     os.makedirs('/etc/cni/net.d', exist_ok=True)
     cni_config = cni.get_config()
+    ip_versions = {net.version for net in get_networks(charm_config('cidr'))}
     context = {
         'connection_string': etcd.get_connection_string(),
         'etcd_key_path': ETCD_KEY_PATH,
         'etcd_cert_path': ETCD_CERT_PATH,
         'etcd_ca_path': ETCD_CA_PATH,
         'kubeconfig_path': cni_config['kubeconfig_path'],
-        'mtu': get_mtu(overlay_interface=True)
+        'mtu': get_mtu(overlay_interface=True),
+        'assign_ipv4': 'true' if 4 in ip_versions else 'false',
+        'assign_ipv6': 'true' if 6 in ip_versions else 'false',
     }
     render('10-calico.conflist', '/etc/cni/net.d/10-calico.conflist', context)
     config = charm_config()
@@ -532,7 +543,8 @@ def configure_bgp_peers():
     safe_unit_name = local_unit().replace('/', '-')
     named_peers = {
         # name must consist of lower case alphanumeric characters, '-' or '.'
-        '%s-%s-%s' % (safe_unit_name, peer['address'], peer['as-number']): peer
+        '%s-%s-%s' % (safe_unit_name, peer['address'].replace(':', '-'),
+                      peer['as-number']): peer
         for peer in peers
     }
 
@@ -729,3 +741,13 @@ def get_route_reflector_cluster_id():
     )
     unit_id = get_unit_id()
     return route_reflector_cluster_ids.get(unit_id)
+
+
+def get_network(cidr):
+    '''Convert a CIDR to a network instance.'''
+    return ipaddress.ip_interface(cidr.strip()).network
+
+
+def get_networks(cidrs):
+    '''Convert a comma-separated list of CIDRs to a list of networks.'''
+    return [get_network(cidr) for cidr in cidrs.split(',')]

@@ -13,7 +13,9 @@
       "mtu": {{ mtu }},
       {%- endif %}
       "ipam": {
-          "type": "calico-ipam"
+          "type": "calico-ipam",
+          "assign_ipv4": "{{ assign_ipv4 }}",
+          "assign_ipv6": "{{ assign_ipv6 }}"
       },
       "policy": {
           "type": "k8s"
