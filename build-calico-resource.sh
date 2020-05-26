@@ -79,12 +79,24 @@ for arch in ${arches}; do
       https://github.com/projectcalico/calico-upgrade/releases/download/v1.0.5/calico-upgrade
     chmod +x calico-upgrade
   elif [ $arch = arm64 ]; then
-    git clone https://github.com/projectcalico/calico-upgrade repo
-    pushd repo
-    git checkout 2de2f7a0f26ef3bb1c2cabf06b2dcbcc2bba1d35  # known good commit
-    make build ARCH=arm64
-    popd
-    mv repo/dist/calico-upgrade-linux-$arch ./calico-upgrade
+    # git clone https://github.com/projectcalico/calico-upgrade repo
+    # pushd repo
+    # git checkout 2de2f7a0f26ef3bb1c2cabf06b2dcbcc2bba1d35  # known good commit
+    # make build ARCH=arm64
+    # popd
+    # mv repo/dist/calico-upgrade-linux-$arch ./calico-upgrade
+
+    # arm64 builds are failing due to an upstream issue:
+    # https://github.com/projectcalico/calico-upgrade/issues/42
+    # For now, we will pull a previously built binary from the charm store.
+    wget https://api.jujucharms.com/charmstore/v5/~containers/calico-698/resource/calico-upgrade-arm64/462 \
+      -O calico-upgrade-arm64.tar.gz
+    tar -xf calico-upgrade-arm64.tar.gz
+    checksum="$(sha256sum calico-upgrade)"
+    if [ "$checksum" != "7a07816c26ad19f526ab2f57353043dabd708a48185268b41493e458c59b797d  calico-upgrade" ]; then
+      echo 'ERROR: checksum does not match, aborting'
+      exit 1
+    fi
   else
     echo "Unsupported architecture for calico-upgrade: $arch"
     exit 1
