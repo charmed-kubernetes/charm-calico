@@ -17,7 +17,7 @@ options:
       IPIP mode. Must be one of "Always", "CrossSubnet", or "Never".
   veth-mtu:
     type: int
-    default: 
+    default:
     description: |
       Set veth MTU size for multiple scenarios. Users should follow instructions:
       https://docs.projectcalico.org/networking/mtu
@@ -115,3 +115,9 @@ options:
       reflector cluster ID allows the node to function as a route reflector.
 
       Example value: "{0: 224.0.0.1, 2: 224.0.0.1}"
+  ignore-loose-rpf:
+    type: boolean
+    default: false
+    description: |
+      Enable or disable IgnoreLooseRPF for Calico Felix.  This is only used
+      when rp_filter is set to a value of 2.

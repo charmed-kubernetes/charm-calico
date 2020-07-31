@@ -296,7 +296,8 @@ def install_calico_service():
         # specify IP so calico doesn't grab a silly one from, say, lxdbr0
         'ip': get_bind_address(),
         'mtu': get_mtu(overlay_interface=False),
-        'calico_node_image': charm_config('calico-node-image')
+        'calico_node_image': charm_config('calico-node-image'),
+        'ignore_loose_rpf': charm_config('ignore-loose-rpf'),
     })
     check_call(['systemctl', 'daemon-reload'])
     service_restart('calico-node')
@@ -309,6 +310,11 @@ def install_calico_service():
 def configure_mtu():
     remove_state('calico.service.installed')
     remove_state('calico.cni.configured')
+
+
+@when('config.changed.ignore-loose-rpf')
+def ignore_loose_rpf_changed():
+    remove_state('calico.service.installed')
 
 
 @when('calico.binaries.installed', 'etcd.available',
