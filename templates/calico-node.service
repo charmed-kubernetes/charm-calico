@@ -23,9 +23,10 @@ ExecStart=/usr/local/sbin/charm-env --charm calico conctl run \
   --env IP6= \
   --env CALICO_NETWORKING_BACKEND=bird \
   --env FELIX_DEFAULTENDPOINTTOHOSTACTION=ACCEPT \
+  --env FELIX_IGNORELOOSERPF={{ ignore_loose_rpf | string | lower }} \
   {% if mtu -%}
   --env FELIX_IPINIPMTU={{ mtu }} \
-  {%- endif %}
+  {% endif -%}
   --mount /lib/modules:/lib/modules \
   --mount /var/run/calico:/var/run/calico \
   --mount /var/log/calico:/var/log/calico \
