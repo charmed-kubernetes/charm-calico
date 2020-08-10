@@ -12,3 +12,11 @@ This charm is a component of Charmed Kubernetes. For full information,
 please visit the [official Charmed Kubernetes docs](https://www.ubuntu.com/kubernetes/docs/charm-calico).
 
 [kubernetes-cni]: https://github.com/juju-solutions/interface-kubernetes-cni
+
+# Developers
+
+## Build charm
+
+```
+make charm
+```
