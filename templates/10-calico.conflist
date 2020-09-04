@@ -9,8 +9,13 @@
       "etcd_cert_file": "{{ etcd_cert_path }}",
       "etcd_ca_cert_file": "{{ etcd_ca_path }}",
       "log_level": "info",
+      {% if mtu -%}
+      "mtu": {{ mtu }},
+      {%- endif %}
       "ipam": {
-          "type": "calico-ipam"
+          "type": "calico-ipam",
+          "assign_ipv4": "{{ assign_ipv4 }}",
+          "assign_ipv6": "{{ assign_ipv6 }}"
       },
       "policy": {
           "type": "k8s"

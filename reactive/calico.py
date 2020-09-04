@@ -16,7 +16,6 @@ from charms.reactive import endpoint_from_flag
 from charms.reactive import data_changed
 from charmhelpers.core.hookenv import (
     log,
-    status_set,
     resource_get,
     network_get,
     unit_private_ip,
@@ -33,6 +32,7 @@ from charmhelpers.core.host import (
     service_running
 )
 from charmhelpers.core.templating import render
+from charms.layer import status
 
 # TODO:
 #   - Handle the 'stop' hook by stopping and uninstalling all the things.
@@ -80,7 +80,7 @@ def upgrade_charm():
 @when('leadership.is_leader', 'leadership.set.calico-v3-data-migration-needed',
       'etcd.available', 'calico.etcd-credentials.installed')
 def upgrade_v3_migrate_data():
-    status_set('maintenance', 'Migrating data to Calico 3')
+    status.maintenance('Migrating data to Calico 3')
     try:
         calico_upgrade.configure()
         calico_upgrade.dry_run()
@@ -88,7 +88,7 @@ def upgrade_v3_migrate_data():
     except Exception:
         log(traceback.format_exc())
         message = 'Calico upgrade failed, see debug log'
-        status_set('blocked', message)
+        status.blocked(message)
         return
     leader_set({'calico-v3-data-migration-needed': None})
 
@@ -102,7 +102,7 @@ def v3_data_ready():
 @when('leadership.is_leader', 'leadership.set.calico-v3-data-ready',
       'leadership.set.calico-v3-npc-cleanup-needed')
 def upgrade_v3_npc_cleanup():
-    status_set('maintenance', 'Cleaning up Calico 2 policy controller')
+    status.maintenance('Cleaning up Calico 2 policy controller')
 
     resources = [
         ('Deployment', 'kube-system', 'calico-policy-controller'),
@@ -129,7 +129,7 @@ def upgrade_v3_npc_cleanup():
       'calico.service.installed', 'calico.npc.deployed')
 @when_not('leadership.set.calico-v3-npc-cleanup-needed')
 def upgrade_v3_complete():
-    status_set('maintenance', 'Completing Calico 3 upgrade')
+    status.maintenance('Completing Calico 3 upgrade')
     try:
         calico_upgrade.configure()
         calico_upgrade.complete()
@@ -137,7 +137,7 @@ def upgrade_v3_complete():
     except Exception:
         log(traceback.format_exc())
         message = 'Calico upgrade failed, see debug log'
-        status_set('blocked', message)
+        status.blocked(message)
         return
     leader_set({'calico-v3-completion-needed': None})
 
@@ -158,23 +158,23 @@ def install_calico_binaries():
     except Exception:
         message = 'Error fetching the calico resource.'
         log(message)
-        status_set('blocked', message)
+        status.blocked(message)
         return
 
     if not archive:
         message = 'Missing calico resource.'
         log(message)
-        status_set('blocked', message)
+        status.blocked(message)
         return
 
     filesize = os.stat(archive).st_size
     if filesize < 1000000:
         message = 'Incomplete calico resource'
         log(message)
-        status_set('blocked', message)
+        status.blocked(message)
         return
 
-    status_set('maintenance', 'Unpacking calico resource.')
+    status.maintenance('Unpacking calico resource.')
 
     charm_dir = os.getenv('CHARM_DIR')
     unpack_path = os.path.join(charm_dir, 'files', 'calico')
@@ -214,7 +214,7 @@ def update_calicoctl_env():
 @when('calico.binaries.installed')
 @when_not('etcd.connected')
 def blocked_without_etcd():
-    status_set('blocked', 'Waiting for relation to etcd')
+    status.blocked('Waiting for relation to etcd')
 
 
 @when('etcd.tls.available')
@@ -238,6 +238,20 @@ def check_etcd_changes():
                                      ETCD_CA_PATH)
         remove_state('calico.service.installed')
         remove_state('calico.npc.deployed')
+
+
+# overlay_interface stands for interfaces that are connected
+# directly to the pods. In Calico, they are prefixed as value set on
+# FELIX_INTERFACEPREFIX, which default is "cali..."
+def get_mtu(overlay_interface=False):
+    if not charm_config('veth-mtu'):
+        return None
+    if overlay_interface:
+        return charm_config('veth-mtu') if charm_config('ipip') == 'Never' \
+           else (charm_config('veth-mtu') - 50)
+    else:
+        return charm_config('veth-mtu')
+    return None
 
 
 def get_bind_address():
@@ -269,10 +283,13 @@ def get_bind_address():
 @when_not('calico.service.installed')
 def install_calico_service():
     ''' Install the calico-node systemd service. '''
-    status_set('maintenance', 'Installing calico-node service.')
+    status.maintenance('Installing calico-node service.')
     etcd = endpoint_from_flag('etcd.available')
     service_path = os.path.join(os.sep, 'lib', 'systemd', 'system',
                                 'calico-node.service')
+    ip_versions = {net.version for net in get_networks(charm_config('cidr'))}
+    ip4 = get_bind_address() if 4 in ip_versions else "none"
+    ip6 = "autodetect" if 6 in ip_versions else "none"
     render('calico-node.service', service_path, {
         'connection_string': etcd.get_connection_string(),
         'etcd_key_path': ETCD_KEY_PATH,
@@ -280,13 +297,28 @@ def install_calico_service():
         'etcd_cert_path': ETCD_CERT_PATH,
         'nodename': gethostname(),
         # specify IP so calico doesn't grab a silly one from, say, lxdbr0
-        'ip': get_bind_address(),
-        'calico_node_image': charm_config('calico-node-image')
+        'ip': ip4,
+        'ip6': ip6,
+        'mtu': get_mtu(overlay_interface=False),
+        'calico_node_image': charm_config('calico-node-image'),
+        'ignore_loose_rpf': charm_config('ignore-loose-rpf'),
     })
     check_call(['systemctl', 'daemon-reload'])
     service_restart('calico-node')
     service('enable', 'calico-node')
     set_state('calico.service.installed')
+
+
+@when('config.changed.veth-mtu')
+@when('calico.cni.configured', 'calico.service.installed')
+def configure_mtu():
+    remove_state('calico.service.installed')
+    remove_state('calico.cni.configured')
+
+
+@when('config.changed.ignore-loose-rpf')
+def ignore_loose_rpf_changed():
+    remove_state('calico.service.installed')
 
 
 @when('calico.binaries.installed', 'etcd.available',
@@ -301,40 +333,44 @@ def configure_calico_pool():
         set_state('calico.pool.configured')
         return
 
-    status_set('maintenance', 'Configuring Calico IP pool')
+    status.maintenance('Configuring Calico IP pool')
 
     try:
         # remove unrecognized pools, and default pool if CIDR doesn't match
         pools = calicoctl_get('pool')['items']
 
+        cidrs = tuple(cidr.strip() for cidr in config['cidr'].split(','))
+        names = tuple('ipv{}'.format(get_network(cidr).version)
+                      for cidr in cidrs)
         pool_names_to_delete = [
             pool['metadata']['name'] for pool in pools
-            if pool['metadata']['name'] != 'default'
-            or pool['spec']['cidr'] != config['cidr']
+            if pool['metadata']['name'] not in names
+            or pool['spec']['cidr'] not in cidrs
         ]
 
         for pool_name in pool_names_to_delete:
             log('Deleting pool: %s' % pool_name)
             calicoctl('delete', 'pool', pool_name, '--skip-not-exists')
 
-        # configure the default pool
-        pool = {
-            'apiVersion': 'projectcalico.org/v3',
-            'kind': 'IPPool',
-            'metadata': {
-                'name': 'default'
-            },
-            'spec': {
-                'cidr': config['cidr'],
-                'ipipMode': config['ipip'],
-                'natOutgoing': config['nat-outgoing']
+        for cidr, name in zip(cidrs, names):
+            # configure the default pool
+            pool = {
+                'apiVersion': 'projectcalico.org/v3',
+                'kind': 'IPPool',
+                'metadata': {
+                    'name': name,
+                },
+                'spec': {
+                    'cidr': cidr,
+                    'ipipMode': config['ipip'],
+                    'natOutgoing': config['nat-outgoing'],
+                }
             }
-        }
 
-        calicoctl_apply(pool)
+            calicoctl_apply(pool)
     except CalledProcessError:
         log(traceback.format_exc())
-        status_set('waiting', 'Waiting to retry calico pool configuration')
+        status.waiting('Waiting to retry calico pool configuration')
         return
 
     set_state('calico.pool.configured')
@@ -351,17 +387,21 @@ def reconfigure_calico_pool():
 @when_not('calico.cni.configured')
 def configure_cni():
     ''' Configure Calico CNI. '''
-    status_set('maintenance', 'Configuring Calico CNI')
+    status.maintenance('Configuring Calico CNI')
     cni = endpoint_from_flag('cni.is-worker')
     etcd = endpoint_from_flag('etcd.available')
     os.makedirs('/etc/cni/net.d', exist_ok=True)
     cni_config = cni.get_config()
+    ip_versions = {net.version for net in get_networks(charm_config('cidr'))}
     context = {
         'connection_string': etcd.get_connection_string(),
         'etcd_key_path': ETCD_KEY_PATH,
         'etcd_cert_path': ETCD_CERT_PATH,
         'etcd_ca_path': ETCD_CA_PATH,
-        'kubeconfig_path': cni_config['kubeconfig_path']
+        'kubeconfig_path': cni_config['kubeconfig_path'],
+        'mtu': get_mtu(overlay_interface=True),
+        'assign_ipv4': 'true' if 4 in ip_versions else 'false',
+        'assign_ipv6': 'true' if 6 in ip_versions else 'false',
     }
     render('10-calico.conflist', '/etc/cni/net.d/10-calico.conflist', context)
     config = charm_config()
@@ -372,7 +412,7 @@ def configure_cni():
 @when('etcd.available', 'cni.is-master')
 @when_not('calico.cni.configured')
 def configure_master_cni():
-    status_set('maintenance', 'Configuring Calico CNI')
+    status.maintenance('Configuring Calico CNI')
     cni = endpoint_from_flag('cni.is-master')
     config = charm_config()
     cni.set_config(cidr=config['cidr'], cni_conf_file='10-calico.conflist')
@@ -390,7 +430,7 @@ def reconfigure_cni():
 @when_not('calico.npc.deployed')
 def deploy_network_policy_controller():
     ''' Deploy the Calico network policy controller. '''
-    status_set('maintenance', 'Deploying network policy controller.')
+    status.maintenance('Deploying network policy controller.')
     etcd = endpoint_from_flag('etcd.available')
     context = {
         'connection_string': etcd.get_connection_string(),
@@ -405,7 +445,7 @@ def deploy_network_policy_controller():
         kubectl('apply', '-f', '/tmp/policy-controller.yaml')
         set_state('calico.npc.deployed')
     except CalledProcessError as e:
-        status_set('waiting', 'Waiting for kubernetes')
+        status.waiting('Waiting for kubernetes')
         log(str(e))
 
 
@@ -413,7 +453,7 @@ def deploy_network_policy_controller():
       'leadership.set.calico-v3-data-ready')
 @when_not('calico.bgp.globals.configured')
 def configure_bgp_globals():
-    status_set('maintenance', 'Configuring BGP globals')
+    status.maintenance('Configuring BGP globals')
     config = charm_config()
 
     try:
@@ -439,7 +479,7 @@ def configure_bgp_globals():
         calicoctl_apply(bgp_config)
     except CalledProcessError:
         log(traceback.format_exc())
-        status_set('waiting', 'Waiting to retry BGP global configuration')
+        status.waiting('Waiting to retry BGP global configuration')
         return
 
     set_state('calico.bgp.globals.configured')
@@ -455,7 +495,7 @@ def reconfigure_bgp_globals():
       'leadership.set.calico-v3-data-ready')
 @when_not('calico.node.configured')
 def configure_node():
-    status_set('maintenance', 'Configuring Calico node')
+    status.maintenance('Configuring Calico node')
 
     node_name = gethostname()
     as_number = get_unit_as_number()
@@ -469,7 +509,7 @@ def configure_node():
         calicoctl_apply(node)
     except CalledProcessError:
         log(traceback.format_exc())
-        status_set('waiting', 'Waiting to retry Calico node configuration')
+        status.waiting('Waiting to retry Calico node configuration')
         return
 
     set_state('calico.node.configured')
@@ -485,7 +525,7 @@ def reconfigure_node():
       'leadership.set.calico-v3-data-ready')
 @when_not('calico.bgp.peers.configured')
 def configure_bgp_peers():
-    status_set('maintenance', 'Configuring BGP peers')
+    status.maintenance('Configuring BGP peers')
 
     peers = []
 
@@ -509,7 +549,8 @@ def configure_bgp_peers():
     safe_unit_name = local_unit().replace('/', '-')
     named_peers = {
         # name must consist of lower case alphanumeric characters, '-' or '.'
-        '%s-%s-%s' % (safe_unit_name, peer['address'], peer['as-number']): peer
+        '%s-%s-%s' % (safe_unit_name, peer['address'].replace(':', '-'),
+                      peer['as-number']): peer
         for peer in peers
     }
 
@@ -543,7 +584,7 @@ def configure_bgp_peers():
             calicoctl('delete', 'bgppeer', peer)
     except CalledProcessError:
         log(traceback.format_exc())
-        status_set('waiting', 'Waiting to retry BGP peer configuration')
+        status.waiting('Waiting to retry BGP peer configuration')
         return
 
     set_state('calico.bgp.peers.configured')
@@ -562,16 +603,19 @@ def ready():
         'calico.cni.configured', 'calico.bgp.globals.configured',
         'calico.node.configured', 'calico.bgp.peers.configured'
     ]
+    if is_state('upgrade.series.in-progress'):
+        status.blocked('Series upgrade in progress')
+        return
     for precondition in preconditions:
         if not is_state(precondition):
             return
     if is_leader() and not is_state('calico.npc.deployed'):
-        status_set('waiting', 'Waiting to retry deploying policy controller')
+        status.waiting('Waiting to retry deploying policy controller')
         return
     if not service_running('calico-node'):
-        status_set('waiting', 'Waiting for service: calico-node')
+        status.waiting('Waiting for service: calico-node')
         return
-    status_set('active', 'Calico is active')
+    status.active('Calico is active')
 
 
 def calicoctl(*args):
@@ -607,12 +651,12 @@ def pull_calico_node_image():
     image = resource_get('calico-node-image')
 
     if not image or os.path.getsize(image) == 0:
-        status_set('maintenance', 'Pulling calico-node image')
+        status.maintenance('Pulling calico-node image')
         image = charm_config('calico-node-image')
         set_http_proxy()
         CTL.pull(image)
     else:
-        status_set('maintenance', 'Loading calico-node image')
+        status.maintenance('Loading calico-node image')
         unzipped = '/tmp/calico-node-image.tar'
         with gzip.open(image, 'rb') as f_in:
             with open(unzipped, 'wb') as f_out:
@@ -703,3 +747,13 @@ def get_route_reflector_cluster_id():
     )
     unit_id = get_unit_id()
     return route_reflector_cluster_ids.get(unit_id)
+
+
+def get_network(cidr):
+    '''Convert a CIDR to a network instance.'''
+    return ipaddress.ip_interface(cidr.strip()).network
+
+
+def get_networks(cidrs):
+    '''Convert a comma-separated list of CIDRs to a list of networks.'''
+    return [get_network(cidr) for cidr in cidrs.split(',')]

@@ -17,12 +17,22 @@ ExecStart=/usr/local/sbin/charm-env --charm calico conctl run \
   --env ETCD_KEY_FILE={{ etcd_key_path }} \
   --env NODENAME={{ nodename }} \
   --env IP={{ ip }} \
+  {% if ipv4 == "none" -%}
+  --env CALICO_ROUTER_ID="hash" \
+  {% endif -%}
+  --env IP6={{ ip6 }} \
+  {% if ip6 != "none" -%}
+  --env FELIX_IPV6SUPPORT=true \
+  {% endif -%}
   --env NO_DEFAULT_POOLS=true \
   --env AS= \
   --env CALICO_LIBNETWORK_ENABLED=true \
-  --env IP6= \
   --env CALICO_NETWORKING_BACKEND=bird \
   --env FELIX_DEFAULTENDPOINTTOHOSTACTION=ACCEPT \
+  --env FELIX_IGNORELOOSERPF={{ ignore_loose_rpf | string | lower }} \
+  {% if mtu -%}
+  --env FELIX_IPINIPMTU={{ mtu }} \
+  {% endif -%}
   --mount /lib/modules:/lib/modules \
   --mount /var/run/calico:/var/run/calico \
   --mount /var/log/calico:/var/log/calico \
