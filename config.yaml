@@ -14,7 +14,16 @@ options:
     type: string
     default: Never
     description: |
-      IPIP mode. Must be one of "Always", "CrossSubnet", or "Never".
+      IPIP encapsulation mode. Must be one of "Always", "CrossSubnet", or "Never".
+      This is incompatible with VXLAN encapsulation. If VXLAN encapsulation is
+      enabled, then this must be set to "Never".
+  vxlan:
+    type: string
+    default: Never
+    description: |
+      VXLAN encapsulation mode. Must be one of "Always", "CrossSubnet", or "Never".
+      This is incompatible with IPIP encapsulation. If IPIP encapsulation is
+      enabled, then this must be set to "Never".
   veth-mtu:
     type: int
     default:

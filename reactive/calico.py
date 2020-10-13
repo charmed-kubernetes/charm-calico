@@ -247,11 +247,11 @@ def get_mtu(overlay_interface=False):
     if not charm_config('veth-mtu'):
         return None
     if overlay_interface:
-        return charm_config('veth-mtu') if charm_config('ipip') == 'Never' \
-           else (charm_config('veth-mtu') - 50)
-    else:
-        return charm_config('veth-mtu')
-    return None
+        ipip_enabled = charm_config('ipip') != 'Never'
+        vxlan_enabled = charm_config('vxlan') != 'Never'
+        if ipip_enabled or vxlan_enabled:
+            return charm_config('veth-mtu') - 50
+    return charm_config('veth-mtu')
 
 
 def get_bind_address():
@@ -363,6 +363,7 @@ def configure_calico_pool():
                 'spec': {
                     'cidr': cidr,
                     'ipipMode': config['ipip'],
+                    'vxlanMode': config['vxlan'],
                     'natOutgoing': config['nat-outgoing'],
                 }
             }
@@ -370,14 +371,18 @@ def configure_calico_pool():
             calicoctl_apply(pool)
     except CalledProcessError:
         log(traceback.format_exc())
-        status.waiting('Waiting to retry calico pool configuration')
+        if config['ipip'] != 'Never' and config['vxlan'] != 'Never':
+            status.blocked('ipip and vxlan configs are in conflict')
+        else:
+            status.waiting('Waiting to retry calico pool configuration')
         return
 
     set_state('calico.pool.configured')
 
 
 @when_any('config.changed.ipip', 'config.changed.nat-outgoing',
-          'config.changed.cidr', 'config.changed.manage-pools')
+          'config.changed.cidr', 'config.changed.manage-pools',
+          'config.changed.vxlan')
 def reconfigure_calico_pool():
     ''' Reconfigure the Calico IP pool '''
     remove_state('calico.pool.configured')
