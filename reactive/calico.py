@@ -677,6 +677,22 @@ def repull_calico_node_image():
     remove_state('calico.service.installed')
 
 
+@when('calico.service.installed', 'calico.pool.configured')
+def disable_vxlan_tx_checksumming():
+    '''Workaround for https://github.com/projectcalico/calico/issues/3145'''
+    config = charm_config()
+
+    if config['disable-vxlan-tx-checksumming'] and config['vxlan'] != 'Never':
+        cmd = ['ethtool', '-K', 'vxlan.calico', 'tx-checksum-ip-generic',
+               'off']
+        try:
+            check_call(cmd)
+        except CalledProcessError:
+            msg = 'Waiting to retry disabling VXLAN TX checksumming'
+            log(msg)
+            status.waiting(msg)
+
+
 def calicoctl_get(*args):
     args = ['get', '-o', 'yaml', '--export'] + list(args)
     output = calicoctl(*args)
