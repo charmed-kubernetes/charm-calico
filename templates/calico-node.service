@@ -32,6 +32,7 @@ ExecStart=/usr/local/sbin/charm-env --charm calico conctl run \
   --env FELIX_IGNORELOOSERPF={{ ignore_loose_rpf | string | lower }} \
   {% if mtu -%}
   --env FELIX_IPINIPMTU={{ mtu }} \
+  --env FELIX_VXLANMTU={{ mtu }} \
   {% endif -%}
   --mount /lib/modules:/lib/modules \
   --mount /var/run/calico:/var/run/calico \

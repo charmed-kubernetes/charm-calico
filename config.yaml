@@ -14,7 +14,16 @@ options:
     type: string
     default: Never
     description: |
-      IPIP mode. Must be one of "Always", "CrossSubnet", or "Never".
+      IPIP encapsulation mode. Must be one of "Always", "CrossSubnet", or "Never".
+      This is incompatible with VXLAN encapsulation. If VXLAN encapsulation is
+      enabled, then this must be set to "Never".
+  vxlan:
+    type: string
+    default: Never
+    description: |
+      VXLAN encapsulation mode. Must be one of "Always", "CrossSubnet", or "Never".
+      This is incompatible with IPIP encapsulation. If IPIP encapsulation is
+      enabled, then this must be set to "Never".
   veth-mtu:
     type: int
     default:
@@ -121,3 +130,11 @@ options:
     description: |
       Enable or disable IgnoreLooseRPF for Calico Felix.  This is only used
       when rp_filter is set to a value of 2.
+  disable-vxlan-tx-checksumming:
+    type: boolean
+    default: true
+    description: |
+      When set to true, if VXLAN encapsulation is in use, then the charm will
+      disable TX checksumming on the vxlan.calico network interface. This works
+      around an upstream issue in Calico:
+      https://github.com/projectcalico/calico/issues/3145
