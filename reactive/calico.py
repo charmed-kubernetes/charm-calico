@@ -240,18 +240,18 @@ def check_etcd_changes():
         remove_state('calico.npc.deployed')
 
 
-# overlay_interface stands for interfaces that are connected
-# directly to the pods. In Calico, they are prefixed as value set on
-# FELIX_INTERFACEPREFIX, which default is "cali..."
-def get_mtu(overlay_interface=False):
-    if not charm_config('veth-mtu'):
+def get_mtu():
+    ''' Get user-specified MTU size, adjusted to make room for encapsulation
+    headers. https://docs.projectcalico.org/networking/mtu
+    '''
+    mtu = charm_config('veth-mtu')
+    if not mtu:
         return None
-    if overlay_interface:
-        return charm_config('veth-mtu') if charm_config('ipip') == 'Never' \
-           else (charm_config('veth-mtu') - 50)
-    else:
-        return charm_config('veth-mtu')
-    return None
+    if charm_config('vxlan') != 'Never':
+        return mtu - 50
+    elif charm_config('ipip') != 'Never':
+        return mtu - 20
+    return mtu
 
 
 def get_bind_address():
@@ -299,7 +299,7 @@ def install_calico_service():
         # specify IP so calico doesn't grab a silly one from, say, lxdbr0
         'ip': ip4,
         'ip6': ip6,
-        'mtu': get_mtu(overlay_interface=False),
+        'mtu': get_mtu(),
         'calico_node_image': charm_config('calico-node-image'),
         'ignore_loose_rpf': charm_config('ignore-loose-rpf'),
     })
@@ -310,7 +310,6 @@ def install_calico_service():
 
 
 @when('config.changed.veth-mtu')
-@when('calico.cni.configured', 'calico.service.installed')
 def configure_mtu():
     remove_state('calico.service.installed')
     remove_state('calico.cni.configured')
@@ -399,7 +398,7 @@ def configure_cni():
         'etcd_cert_path': ETCD_CERT_PATH,
         'etcd_ca_path': ETCD_CA_PATH,
         'kubeconfig_path': cni_config['kubeconfig_path'],
-        'mtu': get_mtu(overlay_interface=True),
+        'mtu': get_mtu(),
         'assign_ipv4': 'true' if 4 in ip_versions else 'false',
         'assign_ipv6': 'true' if 6 in ip_versions else 'false',
     }

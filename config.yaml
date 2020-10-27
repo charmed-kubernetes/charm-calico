@@ -19,8 +19,13 @@ options:
     type: int
     default:
     description: |
-      Set veth MTU size for multiple scenarios. Users should follow instructions:
-      https://docs.projectcalico.org/networking/mtu
+      Set veth MTU size. This should be set to the MTU size of the base network.
+
+      If VXLAN is enabled, then the charm will automatically subtract 50 from the
+      specified MTU size.
+
+      If IPIP is enabled, then the charm will automatically subtract 20 from the
+      specified MTU size.
   nat-outgoing:
     type: boolean
     default: true
