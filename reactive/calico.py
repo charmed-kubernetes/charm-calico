@@ -303,6 +303,8 @@ def install_calico_service():
         'mtu': get_mtu(),
         'calico_node_image': charm_config('calico-node-image'),
         'ignore_loose_rpf': charm_config('ignore-loose-rpf'),
+        'lc_all': os.environ.get('LC_ALL', 'C.UTF-8'),
+        'lang': os.environ.get('LANG', 'C.UTF-8')
     })
     check_call(['systemctl', 'daemon-reload'])
     service_restart('calico-node')
