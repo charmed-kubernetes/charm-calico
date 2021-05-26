@@ -34,6 +34,7 @@ ExecStart=/usr/local/sbin/charm-env --charm calico conctl run \
   --env CALICO_NETWORKING_BACKEND=bird \
   --env FELIX_DEFAULTENDPOINTTOHOSTACTION=ACCEPT \
   --env FELIX_IGNORELOOSERPF={{ ignore_loose_rpf | string | lower }} \
+  --env KUBECONFIG=/opt/calicoctl/kubeconfig \
   {% if mtu -%}
   --env FELIX_IPINIPMTU={{ mtu }} \
   --env FELIX_VXLANMTU={{ mtu }} \
