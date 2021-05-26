@@ -375,6 +375,12 @@ def configure_calico_pool():
                     'vxlanMode': config['vxlan'],
                     'natOutgoing': config['nat-outgoing'],
                 }
+
+                if config.get('service-cluster-ips'):
+                    spec.update({'serviceClusterIPs': [config['service-cluster-ips']])
+
+                if config.get('service-external-ips'):
+                    spec.update({'serviceExternalIPs': [config['service-external-ips']])
             }
 
             calicoctl_apply(pool)

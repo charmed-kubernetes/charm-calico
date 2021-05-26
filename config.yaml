@@ -143,3 +143,13 @@ options:
       disable TX checksumming on the vxlan.calico network interface. This works
       around an upstream issue in Calico:
       https://github.com/projectcalico/calico/issues/3145
+  service-cluster-ips:
+    type: string
+    default: ""
+    description: |
+      When set, defines that service cluster prefixes should be advertised to eBGP peers.
+  service-external-ips:
+    type: string
+    default: ""
+    description: |
+      When set, defines that service external prefixes should be advertised to eBGP peers.
