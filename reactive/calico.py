@@ -377,13 +377,13 @@ def configure_calico_pool():
                 }
             }
 
-            if config['service-cluster-ips']:
+            if config['bgp-service-cluster-ips']:
                 pool['spec'].update({'serviceClusterIPs':
-                                    [config['service-cluster-ips']]})
+                                    [config['bgp-service-cluster-ips']]})
 
-            if config['service-external-ips']:
+            if config['bgp-service-external-ips']:
                 pool['spec'].update({'serviceExternalIPs':
-                                    [config['service-external-ips']]})
+                                    [config['bgp-service-external-ips']]})
 
             calicoctl_apply(pool)
     except CalledProcessError:
@@ -477,8 +477,10 @@ def deploy_network_policy_controller():
 def configure_bgp_globals():
     status.maintenance('Configuring BGP globals')
     config = charm_config()
-    c_cidrs = tuple(cidr for cidr in config['service-cluster-ips'].split(' '))
-    e_cidrs = tuple(cidr for cidr in config['service-external-ips'].split(' '))
+    c_cidr = tuple(cidr
+                   for cidr in config['bgp-service-cluster-ips'].split(' '))
+    e_cidr = tuple(cidr
+                   for cidr in config['bgp-service-external-ips'].split(' '))
     try:
         try:
             bgp_config = calicoctl_get('bgpconfig', 'default')
@@ -493,10 +495,10 @@ def configure_bgp_globals():
                     },
                     'spec': {
                         'serviceClusterIPs': {
-                            'cidr': c_cidrs,  # cluster ip cidr
+                            'cidr': c_cidr,  # cluster ip cidr
                         },
                         'serviceExternalIPs': {
-                            'cidr': e_cidrs,  # external ip cidr
+                            'cidr': e_cidr,  # external ip cidr
                         },
 
                     }
