@@ -519,7 +519,9 @@ def configure_bgp_globals():
 
 
 @when_any('config.changed.global-as-number',
-          'config.changed.node-to-node-mesh')
+          'config.changed.node-to-node-mesh',
+          'config.changed.bgp-service-cluster-ips',
+          'config.changed.bgp-service-external-ips')
 def reconfigure_bgp_globals():
     remove_state('calico.bgp.globals.configured')
 
