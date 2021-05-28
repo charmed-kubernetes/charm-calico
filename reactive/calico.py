@@ -477,7 +477,8 @@ def deploy_network_policy_controller():
 def configure_bgp_globals():
     status.maintenance('Configuring BGP globals')
     config = charm_config()
-
+    c_cidrs = tuple(cidr for cidr in config['service-cluster-ips'].split(' '))
+    e_cidrs = tuple(cidr for cidr in config['service-external-ips'].split(' '))
     try:
         try:
             bgp_config = calicoctl_get('bgpconfig', 'default')
@@ -490,7 +491,15 @@ def configure_bgp_globals():
                     'metadata': {
                         'name': 'default'
                     },
-                    'spec': {}
+                    'spec': {
+                        'serviceClusterIPs': {
+                            'cidr': c_cidrs,  # cluster ip cidr
+                        },
+                        'serviceExternalIPs': {
+                            'cidr': e_cidrs,  # external ip cidr
+                        },
+
+                    }
                 }
             else:
                 raise

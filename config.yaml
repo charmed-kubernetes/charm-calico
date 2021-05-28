@@ -147,9 +147,25 @@ options:
     type: string
     default: ""
     description: |
-      When set, defines that service cluster prefixes should be advertised to eBGP peers.
+      Space-separated list of service cluster CIDRs to advertise over BGP.
+      These will be passed to the .spec.serviceClusterIPs field of the default
+      BGPConfiguration in Calico.
+
+      Example value: "10.0.0.0/24 10.0.1.0/24"
   service-external-ips:
     type: string
     default: ""
     description: |
-      When set, defines that service external prefixes should be advertised to eBGP peers.
+      Space-separated list of service external CIDRs to advertise over BGP.
+      These will be passed to the .spec.serviceExternalIPs field of the
+      default BGPConfiguration in Calico.
+
+    Example value: ”10.0.0.0/24 10.0.1.0/24”
+  service-loadbalancer-ips:
+    type: string
+    default: ""
+    description: |
+      Space-separated list of service LoadBalancer CIDRs to advertise over BGP.
+      These will be passed to the .spec.serviceLoadBalancerIPs field of the
+      default BGPConfiguration in Calico.
+    Example value: ”10.0.0.0/24 10.0.1.0/24”
