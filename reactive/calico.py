@@ -377,14 +377,6 @@ def configure_calico_pool():
                 }
             }
 
-            if config['bgp-service-cluster-ips']:
-                pool['spec'].update({'serviceClusterIPs':
-                                    [config['bgp-service-cluster-ips']]})
-
-            if config['bgp-service-external-ips']:
-                pool['spec'].update({'serviceExternalIPs':
-                                    [config['bgp-service-external-ips']]})
-
             calicoctl_apply(pool)
     except CalledProcessError:
         log(traceback.format_exc())
@@ -478,9 +470,9 @@ def configure_bgp_globals():
     status.maintenance('Configuring BGP globals')
     config = charm_config()
     c_cidr = tuple(cidr
-                   for cidr in config['bgp-service-cluster-ips'].split(' '))
+                   for cidr in config['bgp-service-cluster-ips'].strip().split())
     e_cidr = tuple(cidr
-                   for cidr in config['bgp-service-external-ips'].split(' '))
+                   for cidr in config['bgp-service-external-ips'].strip().split())
     try:
         try:
             bgp_config = calicoctl_get('bgpconfig', 'default')
@@ -493,15 +485,6 @@ def configure_bgp_globals():
                     'metadata': {
                         'name': 'default'
                     },
-                    'spec': {
-                        'serviceClusterIPs': {
-                            'cidr': c_cidr,  # cluster ip cidr
-                        },
-                        'serviceExternalIPs': {
-                            'cidr': e_cidr,  # external ip cidr
-                        },
-
-                    }
                 }
             else:
                 raise
@@ -509,6 +492,11 @@ def configure_bgp_globals():
         spec = bgp_config['spec']
         spec['asNumber'] = config['global-as-number']
         spec['nodeToNodeMeshEnabled'] = config['node-to-node-mesh']
+
+        if c_cidr:
+            spec['serviceClusterIPs'] = [ { 'cidr': cidr } for cidr in c_cidr ]
+        if e_cidr:
+            spec['serviceExternalIPs'] = [ { 'cidr' : cidr } for cidr in e_cidr ]
         calicoctl_apply(bgp_config)
     except CalledProcessError:
         log(traceback.format_exc())
