@@ -160,7 +160,7 @@ options:
       These will be passed to the .spec.serviceExternalIPs field of the
       default BGPConfiguration in Calico.
 
-    Example value: ”10.0.0.0/24 10.0.1.0/24”
+      Example value: "10.0.0.0/24 10.0.1.0/24"
   bgp-service-loadbalancer-ips:
     type: string
     default: ""
@@ -168,4 +168,5 @@ options:
       Space-separated list of service LoadBalancer CIDRs to advertise over BGP.
       These will be passed to the .spec.serviceLoadBalancerIPs field of the
       default BGPConfiguration in Calico.
-    Example value: ”10.0.0.0/24 10.0.1.0/24”
+
+      Example value: "10.0.0.0/24 10.0.1.0/24"
