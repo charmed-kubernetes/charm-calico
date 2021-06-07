@@ -485,6 +485,7 @@ def configure_bgp_globals():
                     'metadata': {
                         'name': 'default'
                     },
+                    'spec': {},
                 }
             else:
                 raise
