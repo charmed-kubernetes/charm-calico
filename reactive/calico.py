@@ -14,6 +14,7 @@ from charms.reactive import when, when_not, when_any, set_state, remove_state
 from charms.reactive import hook, is_state
 from charms.reactive import endpoint_from_flag
 from charms.reactive import data_changed, any_file_changed
+from charms.reactive import register_trigger
 from charmhelpers.core.hookenv import (
     log,
     resource_get,
@@ -52,6 +53,10 @@ ETCD_KEY_PATH = os.path.join(CALICOCTL_PATH, 'etcd-key')
 ETCD_CERT_PATH = os.path.join(CALICOCTL_PATH, 'etcd-cert')
 ETCD_CA_PATH = os.path.join(CALICOCTL_PATH, 'etcd-ca')
 CALICO_UPGRADE_DIR = '/opt/calico-upgrade'
+
+register_trigger(
+    when="cni.kubeconfig-changed", clear_flag="calico.service.installed"
+)
 
 
 @hook('upgrade-charm')
@@ -349,13 +354,8 @@ def install_calico_service():
     check_call(['systemctl', 'daemon-reload'])
     service_restart('calico-node')
     service('enable', 'calico-node')
+    remove_state('cni.kubeconfig-changed')
     set_state('calico.service.installed')
-
-
-@when('calico.service.installed', 'leadership.set.calico-v3-data-ready')
-def watch_kubeconfig():
-    if any_file_changed([kubernetes_common.kubeclientconfig_path]):
-        remove_state('calico.service.installed')
 
 
 @when('config.changed.veth-mtu')
@@ -444,14 +444,13 @@ def configure_cni():
     cni = endpoint_from_flag('cni.is-worker')
     etcd = endpoint_from_flag('etcd.available')
     os.makedirs('/etc/cni/net.d', exist_ok=True)
-    cni_config = cni.get_config()
     ip_versions = {net.version for net in get_networks(charm_config('cidr'))}
     context = {
         'connection_string': etcd.get_connection_string(),
         'etcd_key_path': ETCD_KEY_PATH,
         'etcd_cert_path': ETCD_CERT_PATH,
         'etcd_ca_path': ETCD_CA_PATH,
-        'kubeconfig_path': cni_config['kubeconfig_path'],
+        'kubeconfig_path': '/opt/calicoctl/kubeconfig',
         'mtu': get_mtu(),
         'assign_ipv4': 'true' if 4 in ip_versions else 'false',
         'assign_ipv6': 'true' if 6 in ip_versions else 'false',
