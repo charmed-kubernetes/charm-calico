@@ -536,6 +536,10 @@ def configure_bgp_globals():
             {'cidr': cidr}
             for cidr in config['bgp-service-external-ips'].split()
         ]
+        spec['serviceLoadBalancerIPs'] = [
+            {'cidr': cidr}
+            for cidr in config['bgp-service-loadbalancer-ips'].split()
+        ]
         calicoctl_apply(bgp_config)
     except CalledProcessError:
         log(traceback.format_exc())

@@ -17,6 +17,15 @@ options:
 
       Example value: ”10.0.0.0/24 10.0.1.0/24”
     default: ""
+   bgp-service-loadbalancer-ips:
+    type: string
+    description: |
+      Space-separated list of service load-balancer CIDRs to advertise over BGP.
+      These will be passed to the .spec.serviceLoadBalancerIPs field of the default
+      BGPConfiguration in Calico.
+
+      Example value: ”10.0.0.0/24 10.0.1.0/24”
+    default: ""
   calico-node-image:
     type: string
     # Please refer to layer-canal/versioning.md before changing the version below.
