@@ -17,7 +17,7 @@ options:
 
       Example value: ”10.0.0.0/24 10.0.1.0/24”
     default: ""
-   bgp-service-loadbalancer-ips:
+  bgp-service-loadbalancer-ips:
     type: string
     description: |
       Space-separated list of service load-balancer CIDRs to advertise over BGP.
