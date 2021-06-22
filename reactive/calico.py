@@ -55,7 +55,7 @@ ETCD_CA_PATH = os.path.join(CALICOCTL_PATH, 'etcd-ca')
 CALICO_UPGRADE_DIR = '/opt/calico-upgrade'
 
 register_trigger(
-    when="cni.kubeconfig-changed", clear_flag="calico.service.installed"
+    when="cni.kubeconfig.changed", clear_flag="calico.service.installed"
 )
 
 
@@ -310,8 +310,8 @@ def create_calico_node_token():
 
 
 @when('calico.binaries.installed', 'etcd.available',
-      'calico.etcd-credentials.installed', 'leadership.set.calico-node-token',
-      'leadership.set.calico-v3-data-ready')
+      'calico.etcd-credentials.installed', 'cni.kubeconfig.available',
+      'leadership.set.calico-node-token', 'leadership.set.calico-v3-data-ready')
 @when_not('calico.service.installed')
 def install_calico_service():
     ''' Install the calico-node systemd service. '''
@@ -354,7 +354,7 @@ def install_calico_service():
     check_call(['systemctl', 'daemon-reload'])
     service_restart('calico-node')
     service('enable', 'calico-node')
-    remove_state('cni.kubeconfig-changed')
+    remove_state('cni.kubeconfig.changed')
     set_state('calico.service.installed')
 
 
