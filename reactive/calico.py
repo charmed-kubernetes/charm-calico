@@ -538,10 +538,6 @@ def configure_bgp_globals():
             {'cidr': cidr}
             for cidr in config['bgp-service-external-ips'].split()
         ]
-        spec['serviceLoadBalancerIPs'] = [
-            {'cidr': cidr}
-            for cidr in config['bgp-service-loadbalancer-ips'].split()
-        ]
         calicoctl_apply(bgp_config)
     except CalledProcessError:
         log(traceback.format_exc())
@@ -554,8 +550,7 @@ def configure_bgp_globals():
 @when_any('config.changed.global-as-number',
           'config.changed.node-to-node-mesh',
           'config.changed.bgp-service-cluster-ips',
-          'config.changed.bgp-service-external-ips',
-          'config.changed.bgp-service-loadbalancer-ips')
+          'config.changed.bgp-service-external-ips')
 def reconfigure_bgp_globals():
     remove_state('calico.bgp.globals.configured')
 
