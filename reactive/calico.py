@@ -12,7 +12,7 @@ from subprocess import check_call, check_output, CalledProcessError, STDOUT
 from charms.leadership import leader_get, leader_set
 from charms.reactive import when, when_not, when_any, set_state, remove_state
 from charms.reactive import hook, is_state
-from charms.reactive import endpoint_from_flag
+from charms.reactive import endpoint_from_flag, endpoint_from_name
 from charms.reactive import data_changed, any_file_changed
 from charms.reactive import register_trigger
 from charmhelpers.core.hookenv import (
@@ -81,6 +81,8 @@ def upgrade_charm():
             'calico-v3-npc-cleanup-needed': True,
             'calico-v3-completion-needed': True
         })
+    cni = endpoint_from_name('cni')
+    cni.manage_flags()
 
 
 @when('leadership.is_leader', 'leadership.set.calico-v3-data-migration-needed',
