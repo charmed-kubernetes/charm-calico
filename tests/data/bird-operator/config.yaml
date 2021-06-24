@@ -1,0 +1,9 @@
+options:
+  as-number:
+    type: int
+    description: AS Number
+    default: 64512
+  bgp-peers:
+    type: string
+    description: BGP peers
+    default: "[]"
