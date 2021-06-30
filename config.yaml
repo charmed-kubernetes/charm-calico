@@ -17,15 +17,24 @@ options:
 
       Example value: ”10.0.0.0/24 10.0.1.0/24”
     default: ""
+  bgp-service-loadbalancer-ips:
+    type: string
+    description: |
+      Space-separated list of service load-balancer CIDRs to advertise over BGP.
+      These will be passed to the .spec.serviceLoadBalancerIPs field of the default
+      BGPConfiguration in Calico.
+
+      Example value: ”10.0.0.0/24 10.0.1.0/24”
+    default: ""
   calico-node-image:
     type: string
     # Please refer to layer-canal/versioning.md before changing the version below.
-    default: rocks.canonical.com:443/cdk/calico/node:v3.10.1
+    default: rocks.canonical.com:443/cdk/calico/node:v3.19.1
     description: |
       The image id to use for calico/node.
   calico-policy-image:
     type: string
-    default: rocks.canonical.com:443/cdk/calico/kube-controllers:v3.10.1
+    default: rocks.canonical.com:443/cdk/calico/kube-controllers:v3.19.1
     description: |
       The image id to use for calico/kube-controllers.
   ipip:

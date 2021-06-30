@@ -15,6 +15,7 @@ ExecStart=/usr/local/sbin/charm-env --charm calico conctl run \
   --rm \
   --net-host \
   --privileged \
+  --env DATASTORE_TYPE=etcdv3 \
   --env ETCD_ENDPOINTS={{ connection_string }} \
   --env ETCD_CA_CERT_FILE={{ etcd_ca_path }} \
   --env ETCD_CERT_FILE={{ etcd_cert_path }} \

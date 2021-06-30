@@ -4,6 +4,8 @@ metadata:
   name: calico-kube-controllers
   namespace: kube-system
 ---
+# Source: calico/templates/calico-kube-controllers-rbac.yaml
+
 # Include a clusterrole for the kube-controllers component,
 # and bind it to the calico-kube-controllers serviceaccount.
 kind: ClusterRole
@@ -14,20 +16,18 @@ rules:
   # Pods are monitored for changing labels.
   # The node controller monitors Kubernetes nodes.
   # Namespace and serviceaccount labels are used for policy.
-  - apiGroups: 
-    - ""
-    - extensions
+  - apiGroups: [""]
     resources:
       - pods
       - nodes
       - namespaces
       - serviceaccounts
-      - networkpolicies
     verbs:
       - watch
       - list
-  - apiGroups:
-    - networking.k8s.io
+      - get
+  # Watch for changes to Kubernetes NetworkPolicies.
+  - apiGroups: ["networking.k8s.io"]
     resources:
       - networkpolicies
     verbs:
@@ -47,6 +47,8 @@ subjects:
   name: calico-kube-controllers
   namespace: kube-system
 ---
+# Source: calico/templates/calico-kube-controllers.yaml
+# See https://github.com/projectcalico/kube-controllers
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -56,14 +58,11 @@ metadata:
     k8s-app: calico-kube-controllers
     cdk-restart-on-ca-change: "true"
 spec:
-  # Only a single instance of the this pod should be
-  # active at a time.  Since this pod is run as a Deployment,
-  # Kubernetes will ensure the pod is recreated in case of failure,
-  # removing the need for passive backups.
+  # The controllers can only have a single active instance.
+  replicas: 1
   selector:
     matchLabels:
       k8s-app: calico-kube-controllers
-  replicas: 1
   strategy:
     type: Recreate
   template:
@@ -77,8 +76,19 @@ spec:
         # will restart the pod
         cdk-etcd-cert-last-modified: "{{ etcd_cert_last_modified }}"
     spec:
-      hostNetwork: true
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+        # Mark the pod as a critical add-on for rescheduling.
+        - key: CriticalAddonsOnly
+          operator: Exists
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
       serviceAccountName: calico-kube-controllers
+      priorityClassName: system-cluster-critical
+      # The controllers must run in the host network namespace so that
+      # it isn't governed by policy that would prevent it from working.
+      hostNetwork: true
       containers:
         - name: calico-kube-controllers
           image: {{ calico_policy_image }}
@@ -91,14 +101,34 @@ spec:
               value: {{ etcd_cert_path }}
             - name: ETCD_KEY_FILE
               value: {{ etcd_key_path }}
+            # Choose which controllers to run.
+            - name: ENABLED_CONTROLLERS
+              value: policy,namespace,serviceaccount,workloadendpoint,node
           volumeMounts:
             - name: calicoctl
               mountPath: /opt/calicoctl
+          livenessProbe:
+            exec:
+              command:
+              - /usr/bin/check-status
+              - -l
+            periodSeconds: 10
+            initialDelaySeconds: 10
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+              - /usr/bin/check-status
+              - -r
+            periodSeconds: 10
       volumes:
         - name: calicoctl
           hostPath:
             path: /opt/calicoctl
 ---
+# Source: calico/templates/calico-node-rbac.yaml
+# Include a clusterrole for the calico-node DaemonSet,
+# and bind it to the calico-node serviceaccount.
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -120,7 +150,11 @@ rules:
       # Used to discover service IPs for advertisement.
       - watch
       - list
-      # Used to discover Typhas.
+  # Pod CIDR auto-detection on kubeadm needs access to config maps.
+  - apiGroups: [""]
+    resources:
+      - configmaps
+    verbs:
       - get
   - apiGroups: [""]
     resources:
@@ -128,107 +162,6 @@ rules:
     verbs:
       # Needed for clearing NodeNetworkUnavailable flag.
       - patch
-      # Calico stores some configuration information in node annotations.
-      - update
-  # Watch for changes to Kubernetes NetworkPolicies.
-  - apiGroups: ["networking.k8s.io"]
-    resources:
-      - networkpolicies
-    verbs:
-      - watch
-      - list
-  # Used by Calico for policy information.
-  - apiGroups: [""]
-    resources:
-      - pods
-      - namespaces
-      - serviceaccounts
-    verbs:
-      - list
-      - watch
-  # The CNI plugin patches pods/status.
-  - apiGroups: [""]
-    resources:
-      - pods/status
-    verbs:
-      - patch
-  # Calico monitors various CRDs for config.
-  - apiGroups: ["crd.projectcalico.org"]
-    resources:
-      - globalfelixconfigs
-      - felixconfigurations
-      - bgppeers
-      - globalbgpconfigs
-      - bgpconfigurations
-      - ippools
-      - ipamblocks
-      - globalnetworkpolicies
-      - globalnetworksets
-      - networkpolicies
-      - networksets
-      - clusterinformations
-      - hostendpoints
-      - blockaffinities
-    verbs:
-      - get
-      - list
-      - watch
-  # Calico must create and update some CRDs on startup.
-  - apiGroups: ["crd.projectcalico.org"]
-    resources:
-      - ippools
-      - felixconfigurations
-      - clusterinformations
-    verbs:
-      - create
-      - update
-  # Calico stores some configuration information on the node.
-  - apiGroups: [""]
-    resources:
-      - nodes
-    verbs:
-      - get
-      - list
-      - watch
-  # These permissions are only requried for upgrade from v2.6, and can
-  # be removed after upgrade or on fresh installations.
-  - apiGroups: ["crd.projectcalico.org"]
-    resources:
-      - bgpconfigurations
-      - bgppeers
-    verbs:
-      - create
-      - update
-  # These permissions are required for Calico CNI to perform IPAM allocations.
-  - apiGroups: ["crd.projectcalico.org"]
-    resources:
-      - blockaffinities
-      - ipamblocks
-      - ipamhandles
-    verbs:
-      - get
-      - list
-      - create
-      - update
-      - delete
-  - apiGroups: ["crd.projectcalico.org"]
-    resources:
-      - ipamconfigs
-    verbs:
-      - get
-  # Block affinities must also be watchable by confd for route aggregation.
-  - apiGroups: ["crd.projectcalico.org"]
-    resources:
-      - blockaffinities
-    verbs:
-      - watch
-  # The Calico IPAM migration needs to get daemonsets. These permissions can be
-  # removed if not upgrading from an installation using host-local IPAM.
-  - apiGroups: ["apps"]
-    resources:
-      - daemonsets
-    verbs:
-      - get
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

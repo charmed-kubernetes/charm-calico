@@ -10,8 +10,8 @@ set -eux
 
 # Supported calico architectures
 arches="amd64 arm64"
-calicoctl_version="v3.10.1"
-calico_cni_version="v3.10.1"
+calicoctl_version="v3.19.1"
+calico_cni_version="v3.19.1"
 
 function fetch_and_validate() {
   # fetch a binary and make sure it's what we expect (executable > 20MB)
