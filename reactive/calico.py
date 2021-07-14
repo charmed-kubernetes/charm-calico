@@ -292,12 +292,6 @@ def install_calico_service():
     ip4 = get_bind_address() if 4 in ip_versions else "none"
     ip6 = "autodetect" if 6 in ip_versions else "none"
 
-    if not os.path.exists('/opt/calicoctl/kubeconfig'):
-        with open('/root/.kube/config') as src:
-            data = src.read()
-            with open('/opt/calicoctl/kubeconfig') as dst:
-                dst.write(data)
-
     render('calico-node.service', service_path, {
         'connection_string': etcd.get_connection_string(),
         'etcd_key_path': ETCD_KEY_PATH,
@@ -473,6 +467,12 @@ def configure_bgp_globals():
                    for cidr in config['bgp-service-cluster-ips'].strip().split())
     e_cidr = tuple(cidr
                    for cidr in config['bgp-service-external-ips'].strip().split())
+
+    if not os.path.exists('/opt/calicoctl/kubeconfig') and os.path.isfile('/root/.kube/config'):
+        with open('/root/.kube/config') as src:
+            data = src.read()
+            with open('/opt/calicoctl/kubeconfig') as dst:
+                dst.write(data)
     try:
         try:
             bgp_config = calicoctl_get('bgpconfig', 'default')
