@@ -4,4 +4,5 @@ includes:
   - 'layer:basic'
   - 'layer:leadership'
   - 'layer:status'
+  - 'layer:kubernetes-common'
 repo: https://github.com/juju-solutions/layer-calico.git

@@ -1,4 +1,22 @@
 options:
+  bgp-service-cluster-ips:
+    type: string
+    description: |
+      Space-separated list of service cluster CIDRs to advertise over BGP.
+      These will be passed to the .spec.serviceClusterIPs field of the default
+      BGPConfiguration in Calico.
+
+      Example value: ”10.0.0.0/24 10.0.1.0/24”
+    default: ""
+  bgp-service-external-ips:
+    type: string
+    description: |
+      Space-separated list of service external CIDRs to advertise over BGP.
+      These will be passed to the .spec.serviceExternalIPs field of the default
+      BGPConfiguration in Calico.
+
+      Example value: ”10.0.0.0/24 10.0.1.0/24”
+    default: ""
   calico-node-image:
     type: string
     # Please refer to layer-canal/versioning.md before changing the version below.

@@ -1,22 +1,52 @@
 name: Run tests with Tox
 
-on: [push]
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
 
 jobs:
-  build:
-
+  lint-unit-wheelhouse:
+    name: Lint, Unit, Wheelhouse
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python: [3.6, 3.7, 3.8, 3.9]
-
     steps:
-      - uses: actions/checkout@v2
+    - name: Check out code
+      uses: actions/checkout@v2
+    - name: Setup Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python }}
+    - name: Install Dependencies
+      run: |
+        pip install tox
+        sudo snap install charm --classic
+    - name: Lint
+      run: tox -vve lint
+    - name: Unit Tests
+      run: tox -vve unit
+    - name: Validate Wheelhouse
+      run: tox -vve validate-wheelhouse
+  integration-test:
+    name: Integration test with VMWare
+    runs-on: self-hosted
+    timeout-minutes: 360
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
       - name: Setup Python
-        uses: actions/setup-python@v1
+        uses: actions/setup-python@v2
         with:
-          python-version: ${{ matrix.python }}
-      - name: Install Tox and any other packages
-        run: pip install tox
-      - name: Run Tox
-        run: tox -e py  # Run tox using the version of Python in `PATH`
+          python-version: 3.8
+      - name: Setup operator environment
+        uses: charmed-kubernetes/actions-operator@master
+        with:
+          provider: vsphere
+          credentials-yaml: ${{ secrets.CREDENTIALS_YAML }}
+          clouds-yaml: ${{ secrets.CLOUDS_YAML }}
+          bootstrap-options: "--model-default datastore=vsanDatastore --model-default primary-network=VLAN_2764"
+      - name: Run test
+        run: tox -e integration

@@ -12,8 +12,9 @@ from subprocess import check_call, check_output, CalledProcessError, STDOUT
 from charms.leadership import leader_get, leader_set
 from charms.reactive import when, when_not, when_any, set_state, remove_state
 from charms.reactive import hook, is_state
-from charms.reactive import endpoint_from_flag
-from charms.reactive import data_changed
+from charms.reactive import endpoint_from_flag, endpoint_from_name
+from charms.reactive import data_changed, any_file_changed
+from charms.reactive import register_trigger
 from charmhelpers.core.hookenv import (
     log,
     resource_get,
@@ -32,7 +33,8 @@ from charmhelpers.core.host import (
     service_running
 )
 from charmhelpers.core.templating import render
-from charms.layer import status
+from charms.layer import kubernetes_common, status
+from charms.layer.kubernetes_common import kubectl
 
 # TODO:
 #   - Handle the 'stop' hook by stopping and uninstalling all the things.
@@ -51,6 +53,10 @@ ETCD_KEY_PATH = os.path.join(CALICOCTL_PATH, 'etcd-key')
 ETCD_CERT_PATH = os.path.join(CALICOCTL_PATH, 'etcd-cert')
 ETCD_CA_PATH = os.path.join(CALICOCTL_PATH, 'etcd-ca')
 CALICO_UPGRADE_DIR = '/opt/calico-upgrade'
+
+register_trigger(
+    when="cni.kubeconfig.changed", clear_flag="calico.service.installed"
+)
 
 
 @hook('upgrade-charm')
@@ -75,6 +81,8 @@ def upgrade_charm():
             'calico-v3-npc-cleanup-needed': True,
             'calico-v3-completion-needed': True
         })
+    cni = endpoint_from_name('cni')
+    cni.manage_flags()
 
 
 @when('leadership.is_leader', 'leadership.set.calico-v3-data-migration-needed',
@@ -278,13 +286,52 @@ def get_bind_address():
     return unit_private_ip()
 
 
+@when('leadership.is_leader', 'leadership.set.calico-v3-data-ready')
+@when_not('leadership.set.calico-node-token')
+def create_calico_node_token():
+    ''' Create the system:calico-node user token '''
+    status.maintenance('Creating system:calico-node user token')
+    token = kubernetes_common.token_generator()
+    user = 'system:calico-node'
+    success = kubernetes_common.create_secret(
+        token=token,
+        username=user,
+        user=user
+    )
+    if not success:
+        log('Failed to create system:calico-node user token, will retry')
+        status.waiting('Waiting to retry creating calico-node token')
+        return
+    # create_secret may have added the <user>:: prefix. Get the new token.
+    token = kubernetes_common.get_secret_password(user)
+    if not token:
+        log('Failed to get system:calico-node user token, will retry')
+        status.waiting('Waiting to retry creating calico-node token')
+        return
+    leader_set({'calico-node-token': token})
+
+
 @when('calico.binaries.installed', 'etcd.available',
-      'calico.etcd-credentials.installed',
-      'leadership.set.calico-v3-data-ready')
+      'calico.etcd-credentials.installed', 'cni.kubeconfig.available',
+      'leadership.set.calico-node-token', 'leadership.set.calico-v3-data-ready')
 @when_not('calico.service.installed')
 def install_calico_service():
     ''' Install the calico-node systemd service. '''
     status.maintenance('Installing calico-node service.')
+
+    with open(kubernetes_common.kubeclientconfig_path) as f:
+        kubeconfig = yaml.safe_load(f)
+    any_file_changed([kubernetes_common.kubeclientconfig_path])
+    kubeconfig['users'] = [{
+        'name': 'calico-node',
+        'user': {
+            'token': leader_get('calico-node-token')
+        }
+    }]
+    kubeconfig['contexts'][0]['context']['user'] = 'calico-node'
+    with open('/opt/calicoctl/kubeconfig', 'w') as f:
+        yaml.dump(kubeconfig, f)
+
     etcd = endpoint_from_flag('etcd.available')
     service_path = os.path.join(os.sep, 'lib', 'systemd', 'system',
                                 'calico-node.service')
@@ -309,6 +356,7 @@ def install_calico_service():
     check_call(['systemctl', 'daemon-reload'])
     service_restart('calico-node')
     service('enable', 'calico-node')
+    remove_state('cni.kubeconfig.changed')
     set_state('calico.service.installed')
 
 
@@ -398,14 +446,13 @@ def configure_cni():
     cni = endpoint_from_flag('cni.is-worker')
     etcd = endpoint_from_flag('etcd.available')
     os.makedirs('/etc/cni/net.d', exist_ok=True)
-    cni_config = cni.get_config()
     ip_versions = {net.version for net in get_networks(charm_config('cidr'))}
     context = {
         'connection_string': etcd.get_connection_string(),
         'etcd_key_path': ETCD_KEY_PATH,
         'etcd_cert_path': ETCD_CERT_PATH,
         'etcd_ca_path': ETCD_CA_PATH,
-        'kubeconfig_path': cni_config['kubeconfig_path'],
+        'kubeconfig_path': '/opt/calicoctl/kubeconfig',
         'mtu': get_mtu(),
         'assign_ipv4': 'true' if 4 in ip_versions else 'false',
         'assign_ipv6': 'true' if 6 in ip_versions else 'false',
@@ -483,6 +530,14 @@ def configure_bgp_globals():
         spec = bgp_config['spec']
         spec['asNumber'] = config['global-as-number']
         spec['nodeToNodeMeshEnabled'] = config['node-to-node-mesh']
+        spec['serviceClusterIPs'] = [
+            {'cidr': cidr}
+            for cidr in config['bgp-service-cluster-ips'].split()
+        ]
+        spec['serviceExternalIPs'] = [
+            {'cidr': cidr}
+            for cidr in config['bgp-service-external-ips'].split()
+        ]
         calicoctl_apply(bgp_config)
     except CalledProcessError:
         log(traceback.format_exc())
@@ -493,7 +548,9 @@ def configure_bgp_globals():
 
 
 @when_any('config.changed.global-as-number',
-          'config.changed.node-to-node-mesh')
+          'config.changed.node-to-node-mesh',
+          'config.changed.bgp-service-cluster-ips',
+          'config.changed.bgp-service-external-ips')
 def reconfigure_bgp_globals():
     remove_state('calico.bgp.globals.configured')
 
@@ -707,15 +764,6 @@ def calicoctl_apply(data):
     with open(path, 'w') as f:
         yaml.dump(data, f)
     calicoctl('apply', '-f', path)
-
-
-def kubectl(*args):
-    cmd = ['kubectl', '--kubeconfig=/root/.kube/config'] + list(args)
-    try:
-        return check_output(cmd)
-    except CalledProcessError as e:
-        log(e.output)
-        raise
 
 
 def get_calicoctl_env():

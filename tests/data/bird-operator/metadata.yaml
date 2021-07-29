@@ -1,0 +1,7 @@
+name: bird
+description: |
+  Test charm running BIRD
+summary: |
+  Test charm running BIRD
+series:
+- focal
