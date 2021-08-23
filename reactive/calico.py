@@ -246,6 +246,7 @@ def check_etcd_changes():
                                      ETCD_CA_PATH)
         remove_state('calico.service.installed')
         remove_state('calico.npc.deployed')
+        remove_state('calico.cni.configured')
 
 
 def get_mtu():
