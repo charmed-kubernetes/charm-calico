@@ -439,12 +439,12 @@ def reconfigure_calico_pool():
     remove_state('calico.pool.configured')
 
 
-@when('etcd.available', 'cni.is-worker', 'leadership.set.calico-v3-data-ready')
+@when('etcd.available', 'cni.connected', 'leadership.set.calico-v3-data-ready')
 @when_not('calico.cni.configured')
 def configure_cni():
     ''' Configure Calico CNI. '''
     status.maintenance('Configuring Calico CNI')
-    cni = endpoint_from_flag('cni.is-worker')
+    cni = endpoint_from_flag('cni.connected')
     etcd = endpoint_from_flag('etcd.available')
     os.makedirs('/etc/cni/net.d', exist_ok=True)
     ip_versions = {net.version for net in get_networks(charm_config('cidr'))}
@@ -459,16 +459,6 @@ def configure_cni():
         'assign_ipv6': 'true' if 6 in ip_versions else 'false',
     }
     render('10-calico.conflist', '/etc/cni/net.d/10-calico.conflist', context)
-    config = charm_config()
-    cni.set_config(cidr=config['cidr'], cni_conf_file='10-calico.conflist')
-    set_state('calico.cni.configured')
-
-
-@when('etcd.available', 'cni.is-master')
-@when_not('calico.cni.configured')
-def configure_master_cni():
-    status.maintenance('Configuring Calico CNI')
-    cni = endpoint_from_flag('cni.is-master')
     config = charm_config()
     cni.set_config(cidr=config['cidr'], cni_conf_file='10-calico.conflist')
     set_state('calico.cni.configured')
