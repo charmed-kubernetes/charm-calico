@@ -21,6 +21,7 @@ ExecStart=/usr/local/sbin/charm-env --charm calico conctl run \
   --env ETCD_CERT_FILE={{ etcd_cert_path }} \
   --env ETCD_KEY_FILE={{ etcd_key_path }} \
   --env NODENAME={{ nodename }} \
+  --env CALICO_K8S_NODE_REF={{ nodename }} \
   --env IP={{ ip }} \
   --env KUBECONFIG=/opt/calicoctl/kubeconfig \
   {% if ipv4 == "none" -%}
