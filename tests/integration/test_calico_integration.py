@@ -100,11 +100,12 @@ async def test_bgp_service_ip_advertisement(ops_test, kubernetes):
     await ops_test.model.wait_for_idle(wait_for_active=True, timeout=60 * 10)
 
     # configure calico to peer with bird
-    master_config = await ops_test.model.applications['kubernetes-master'].get_config()
+    k8s_cp = "kubernetes-control-plane"
+    k8s_cp_config = await ops_test.model.applications[k8s_cp].get_config()
     bird_app = ops_test.model.applications['bird']
     calico_app = ops_test.model.applications['calico']
     await calico_app.set_config({
-        'bgp-service-cluster-ips': master_config['service-cidr']['value'],
+        'bgp-service-cluster-ips': k8s_cp_config['service-cidr']['value'],
         'global-bgp-peers': yaml.dump([
             {'address': unit.public_address, 'as-number': 64512}
             for unit in bird_app.units
