@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import pytest
@@ -7,8 +8,27 @@ import yaml
 log = logging.getLogger(__name__)
 
 
+@pytest.fixture(scope="module")
+async def build_all_charms(ops_test):
+    charms = await asyncio.gather(
+        ops_test.build_charm("."),
+        ops_test.build_charm("tests/data/bird-operator")
+    )
+    yield charms
+
+
+@pytest.fixture
+async def calico_charm(build_all_charms):
+    yield build_all_charms[0]
+
+
+@pytest.fixture
+async def bird_charm(build_all_charms):
+    yield build_all_charms[1]
+
+
 @pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test):
+async def test_build_and_deploy(ops_test, calico_charm):
     resource_path = ops_test.tmp_path / "charm-resources"
     resource_path.mkdir()
     resource_build_script = os.path.abspath("./build-calico-resource.sh")
@@ -24,7 +44,7 @@ async def test_build_and_deploy(ops_test):
         pytest.fail("Failed to build charm resources")
     bundle = ops_test.render_bundle(
         "tests/data/bundle.yaml",
-        calico_charm=await ops_test.build_charm("."),
+        calico_charm=calico_charm,
         resource_path=resource_path
     )
     # deploy with Juju CLI because libjuju does not support local resource
@@ -41,7 +61,7 @@ async def test_build_and_deploy(ops_test):
     await ops_test.model.wait_for_idle(wait_for_active=True, timeout=60 * 60)
 
 
-async def test_bgp_service_ip_advertisement(ops_test, kubernetes):
+async def test_bgp_service_ip_advertisement(ops_test, bird_charm, kubernetes):
     # deploy a test service in k8s (nginx)
     deployment = {
         'apiVersion': 'apps/v1',
@@ -94,8 +114,7 @@ async def test_bgp_service_ip_advertisement(ops_test, kubernetes):
     kubernetes.apply_object(service)
     service_ip = kubernetes.read_object(service).spec.cluster_ip
 
-    # build and deploy bird charm
-    bird_charm = await ops_test.build_charm("tests/data/bird-operator")
+    # deploy bird charm
     await ops_test.model.deploy(bird_charm)
     await ops_test.model.wait_for_idle(wait_for_active=True, timeout=60 * 10)
 
