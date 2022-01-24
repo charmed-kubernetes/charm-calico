@@ -1,8 +1,13 @@
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: calico-kube-controllers
-  namespace: kube-system
+# Calico manifest for Charmed Kubernetes.
+#
+# Pulled from upstream on 2022-01-24 at
+# https://docs.projectcalico.org/archive/v3.21/manifests/calico-etcd.yaml
+#
+# Search "CK edit" to find all the changes that were made for this charm.
+---
+# CK edit: Remove calico-etcd-secrets secret
+---
+# CK edit: Remove calico-config ConfigMap
 ---
 # Source: calico/templates/calico-kube-controllers-rbac.yaml
 
@@ -47,84 +52,7 @@ subjects:
   name: calico-kube-controllers
   namespace: kube-system
 ---
-# Source: calico/templates/calico-kube-controllers.yaml
-# See https://github.com/projectcalico/kube-controllers
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: calico-kube-controllers
-  namespace: kube-system
-  labels:
-    k8s-app: calico-kube-controllers
-    cdk-restart-on-ca-change: "true"
-spec:
-  # The controllers can only have a single active instance.
-  replicas: 1
-  selector:
-    matchLabels:
-      k8s-app: calico-kube-controllers
-  strategy:
-    type: Recreate
-  template:
-    metadata:
-      name: calico-kube-controllers
-      namespace: kube-system
-      labels:
-        k8s-app: calico-kube-controllers
-      annotations:
-        # annotate etcd cert modification time, so that when it changes, k8s
-        # will restart the pod
-        cdk-etcd-cert-last-modified: "{{ etcd_cert_last_modified }}"
-    spec:
-      nodeSelector:
-        kubernetes.io/os: linux
-      tolerations:
-        # Mark the pod as a critical add-on for rescheduling.
-        - key: CriticalAddonsOnly
-          operator: Exists
-        - key: node-role.kubernetes.io/master
-          effect: NoSchedule
-      serviceAccountName: calico-kube-controllers
-      priorityClassName: system-cluster-critical
-      # The controllers must run in the host network namespace so that
-      # it isn't governed by policy that would prevent it from working.
-      hostNetwork: true
-      containers:
-        - name: calico-kube-controllers
-          image: {{ calico_policy_image }}
-          env:
-            - name: ETCD_ENDPOINTS
-              value: {{ connection_string }}
-            - name: ETCD_CA_CERT_FILE
-              value: {{ etcd_ca_path }}
-            - name: ETCD_CERT_FILE
-              value: {{ etcd_cert_path }}
-            - name: ETCD_KEY_FILE
-              value: {{ etcd_key_path }}
-            # Choose which controllers to run.
-            - name: ENABLED_CONTROLLERS
-              value: policy,namespace,serviceaccount,workloadendpoint,node
-          volumeMounts:
-            - name: calicoctl
-              mountPath: /opt/calicoctl
-          livenessProbe:
-            exec:
-              command:
-              - /usr/bin/check-status
-              - -l
-            periodSeconds: 10
-            initialDelaySeconds: 10
-            failureThreshold: 6
-          readinessProbe:
-            exec:
-              command:
-              - /usr/bin/check-status
-              - -r
-            periodSeconds: 10
-      volumes:
-        - name: calicoctl
-          hostPath:
-            path: /opt/calicoctl
+
 ---
 # Source: calico/templates/calico-node-rbac.yaml
 # Include a clusterrole for the calico-node DaemonSet,
@@ -142,6 +70,14 @@ rules:
       - namespaces
     verbs:
       - get
+  # EndpointSlices are used for Service-based network policy rule
+  # enforcement.
+  - apiGroups: ["discovery.k8s.io"]
+    resources:
+      - endpointslices
+    verbs:
+      - watch 
+      - list
   - apiGroups: [""]
     resources:
       - endpoints
@@ -162,6 +98,7 @@ rules:
     verbs:
       # Needed for clearing NodeNetworkUnavailable flag.
       - patch
+
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -172,27 +109,132 @@ roleRef:
   kind: ClusterRole
   name: calico-node
 subjects:
+# CK edit: Bind to the system:calico-node user, not the calico-node ServiceAccount.
 - kind: User
   name: system:calico-node
+
 ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: namespace-reader
-rules:
-- apiGroups: [""]
-  resources: ["namespaces"]
-  verbs: ["get"]
+# CK edit: Remove the calico-node DaemonSet
 ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+# CK edit: Remove the calico-node ServiceAccount
+---
+# Source: calico/templates/calico-kube-controllers.yaml
+# See https://github.com/projectcalico/kube-controllers
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: nodes-namespace-reader
-subjects:
-- apiGroup: rbac.authorization.k8s.io
-  kind: Group
-  name: system:nodes
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: namespace-reader
+  name: calico-kube-controllers
+  namespace: kube-system
+  labels:
+    k8s-app: calico-kube-controllers
+    # CK edit: Add cdk-restart-on-ca-change label
+    cdk-restart-on-ca-change: "true"
+spec:
+  # The controllers can only have a single active instance.
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: calico-kube-controllers
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      name: calico-kube-controllers
+      namespace: kube-system
+      labels:
+        k8s-app: calico-kube-controllers
+      # CK edit: Add cdk-etcd-cert-last-modified annotation
+      annotations:
+        # annotate etcd cert modification time, so that when it changes, k8s
+        # will restart the pod
+        cdk-etcd-cert-last-modified: "{{ etcd_cert_last_modified }}"
+    spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+        # Mark the pod as a critical add-on for rescheduling.
+        - key: CriticalAddonsOnly
+          operator: Exists
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
+      serviceAccountName: calico-kube-controllers
+      priorityClassName: system-cluster-critical
+      # The controllers must run in the host network namespace so that
+      # it isn't governed by policy that would prevent it from working.
+      hostNetwork: true
+      containers:
+        - name: calico-kube-controllers
+          # CK edit: Use image from calico_policy_image template variable
+          image: {{ calico_policy_image }}
+          env:
+            # CK edit: Use etcd connection details from template variables
+            - name: ETCD_ENDPOINTS
+              value: {{ connection_string }}
+            - name: ETCD_CA_CERT_FILE
+              value: {{ etcd_ca_path }}
+            - name: ETCD_CERT_FILE
+              value: {{ etcd_cert_path }}
+            - name: ETCD_KEY_FILE
+              value: {{ etcd_key_path }}
+            # Choose which controllers to run.
+            - name: ENABLED_CONTROLLERS
+              value: policy,namespace,serviceaccount,workloadendpoint,node
+          volumeMounts:
+            # CK edit: Mount calicoctl volume
+            - name: calicoctl
+              mountPath: /opt/calicoctl
+          livenessProbe:
+            exec:
+              command:
+              - /usr/bin/check-status
+              - -l
+            periodSeconds: 10
+            initialDelaySeconds: 10
+            failureThreshold: 6
+            timeoutSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+              - /usr/bin/check-status
+              - -r
+            periodSeconds: 10
+      volumes:
+        # CK edit: Mount calicoctl volume
+        - name: calicoctl
+          hostPath:
+            path: /opt/calicoctl
+---
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: calico-kube-controllers
+  namespace: kube-system
+
+---
+
+# This manifest creates a Pod Disruption Budget for Controller to allow K8s Cluster Autoscaler to evict
+
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: calico-kube-controllers
+  namespace: kube-system
+  labels:
+    k8s-app: calico-kube-controllers
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      k8s-app: calico-kube-controllers
+
+---
+# Source: calico/templates/calico-typha.yaml
+
+---
+# Source: calico/templates/configure-canal.yaml
+
+---
+# Source: calico/templates/kdd-crds.yaml
+
+
