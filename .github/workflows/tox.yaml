@@ -42,11 +42,11 @@ jobs:
         with:
           python-version: 3.8
       - name: Setup operator environment
-        uses: charmed-kubernetes/actions-operator@master
+        uses: charmed-kubernetes/actions-operator@main
         with:
           provider: vsphere
           credentials-yaml: ${{ secrets.CREDENTIALS_YAML }}
           clouds-yaml: ${{ secrets.CLOUDS_YAML }}
           bootstrap-options: "--model-default datastore=vsanDatastore --model-default primary-network=VLAN_2764"
       - name: Run test
-        run: tox -e integration
+        run: tox -e integration -- --destructive-mode
