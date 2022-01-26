@@ -37,7 +37,7 @@ services:
       ignore-loose-rpf: true
       vxlan: Always
   kubernetes-control-plane:
-    charm: cs:~containers/kubernetes-master
+    charm: kubernetes-control-plane
     channel: edge
     constraints: cores=2 mem=4G root-disk=16G
     expose: true
