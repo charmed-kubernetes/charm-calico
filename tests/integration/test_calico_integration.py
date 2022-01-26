@@ -58,7 +58,31 @@ async def test_build_and_deploy(ops_test, calico_charm):
         log.error(f"stdout:\n{stdout.strip()}")
         log.error(f"stderr:\n{stderr.strip()}")
         pytest.fail("Failed to deploy bundle")
-    await ops_test.model.wait_for_idle(wait_for_active=True, timeout=60 * 60)
+
+    try:
+        await ops_test.model.wait_for_idle(wait_for_active=True, timeout=60 * 60)
+    except asyncio.TimeoutError:
+        k8s_cp = "kubernetes-control-plane"
+        assert k8s_cp in ops_test.model.applications
+        app = ops_test.model.applications[k8s_cp]
+        assert app.units, f"No {k8s_cp} units available"
+        unit = app.units[0]
+        if "kube-system pod" in unit.workload_status_message:
+            log.debug(
+                await juju_run(
+                    unit, "kubectl --kubeconfig /root/.kube/config get all -A"
+                )
+            )
+        raise
+
+
+async def juju_run(unit, cmd):
+    result = await unit.run(cmd)
+    code = result.results["Code"]
+    stdout = result.results.get("Stdout")
+    stderr = result.results.get("Stderr")
+    assert code == "0", f"{cmd} failed ({code}): {stderr or stdout}"
+    return stdout
 
 
 async def test_bgp_service_ip_advertisement(ops_test, bird_charm, kubernetes):
