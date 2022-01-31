@@ -36,9 +36,9 @@ services:
     options:
       ignore-loose-rpf: true
       vxlan: Always
-  kubernetes-master:
-    charm: cs:~containers/kubernetes-master
-    channel: edge
+  kubernetes-control-plane:
+    charm: kubernetes-control-plane
+    channel: latest/edge
     constraints: cores=2 mem=4G root-disk=16G
     expose: true
     num_units: 1
@@ -57,11 +57,11 @@ services:
     to:
     - '1'
 relations:
-- - kubernetes-master:kube-control
+- - kubernetes-control-plane:kube-control
   - kubernetes-worker:kube-control
-- - kubernetes-master:certificates
+- - kubernetes-control-plane:certificates
   - easyrsa:client
-- - kubernetes-master:etcd
+- - kubernetes-control-plane:etcd
   - etcd:db
 - - kubernetes-worker:certificates
   - easyrsa:client
@@ -70,11 +70,11 @@ relations:
 - - calico:etcd
   - etcd:db
 - - calico:cni
-  - kubernetes-master:cni
+  - kubernetes-control-plane:cni
 - - calico:cni
   - kubernetes-worker:cni
 - - containerd:containerd
   - kubernetes-worker:container-runtime
 - - containerd:containerd
-  - kubernetes-master:container-runtime
+  - kubernetes-control-plane:container-runtime
 

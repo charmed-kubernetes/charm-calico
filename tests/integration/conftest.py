@@ -12,13 +12,13 @@ log = logging.getLogger(__name__)
 async def kubernetes(ops_test):
     kubeconfig_path = ops_test.tmp_path / "kubeconfig"
     retcode, stdout, stderr = await ops_test.run(
-        "juju", "scp", "kubernetes-master/leader:config", kubeconfig_path
+        "juju", "scp", "kubernetes-control-plane/leader:config", kubeconfig_path
     )
     if retcode != 0:
         log.error(f"retcode: {retcode}")
         log.error(f"stdout:\n{stdout.strip()}")
         log.error(f"stderr:\n{stderr.strip()}")
-        pytest.fail("Failed to copy kubeconfig from kubernetes-master")
+        pytest.fail("Failed to copy kubeconfig from kubernetes-control-plane")
     namespace = "test-calico-integration-" + "".join(
         random.choice(string.ascii_lowercase + string.digits)
         for _ in range(5)
