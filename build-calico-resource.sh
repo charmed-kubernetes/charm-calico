@@ -10,8 +10,7 @@ set -eux
 
 # Supported calico architectures
 arches="amd64 arm64"
-calicoctl_version="v3.19.3"
-calico_cni_version="v3.19.3"
+calico_version="v3.21.4"
 
 function fetch_and_validate() {
   # fetch a binary and make sure it's what we expect (executable > 20MB)
@@ -48,26 +47,25 @@ function fetch_and_validate() {
   fi
 }
 
+wget \
+  https://github.com/projectcalico/calico/releases/download/$calico_version/release-$calico_version.tgz
+tar -xf release-$calico_version.tgz
+
 for arch in ${arches}; do
   rm -rf resource-build-$arch
   mkdir resource-build-$arch
   pushd resource-build-$arch
-  fetch_and_validate \
-    https://github.com/projectcalico/calicoctl/releases/download/$calicoctl_version/calicoctl-linux-$arch
-  fetch_and_validate \
-    https://github.com/projectcalico/cni-plugin/releases/download/$calico_cni_version/calico-$arch
-  fetch_and_validate \
-    https://github.com/projectcalico/cni-plugin/releases/download/$calico_cni_version/calico-ipam-$arch
-  mv calicoctl-linux-$arch calicoctl
-  mv calico-$arch calico
-  mv calico-ipam-$arch calico-ipam
+  cp ../release-$calico_version/bin/calicoctl/calicoctl-linux-$arch calicoctl
+  cp ../release-$calico_version/bin/cni/$arch/calico calico
+  cp ../release-$calico_version/bin/cni/$arch/calico-ipam calico-ipam
 
-  chmod +x calicoctl calico calico-ipam
   tar -zcvf ../calico-$arch.tar.gz .
 
   popd
   rm -rf resource-build-$arch
 done
+
+rm -rf release-$calico_version.tgz release-$calico_version
 
 # calico-upgrade resource
 for arch in ${arches}; do
