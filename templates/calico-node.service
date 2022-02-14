@@ -41,6 +41,7 @@ ExecStart=/usr/local/sbin/charm-env --charm calico conctl run \
   --env FELIX_IPINIPMTU={{ mtu }} \
   --env FELIX_VXLANMTU={{ mtu }} \
   {% endif -%}
+  --env CALICO_MANAGE_CNI=false \
   --mount /lib/modules:/lib/modules \
   --mount /var/run/calico:/var/run/calico \
   --mount /var/log/calico:/var/log/calico \
