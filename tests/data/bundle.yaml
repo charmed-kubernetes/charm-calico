@@ -9,16 +9,16 @@ machines:
     series: focal
 services:
   containerd:
-    charm: cs:~containers/containerd
+    charm: containerd
     channel: edge
   easyrsa:
-    charm: cs:~containers/easyrsa
+    charm: easyrsa
     channel: edge
     num_units: 1
     to:
     - '1'
   etcd:
-    charm: cs:~containers/etcd
+    charm: etcd
     channel: edge
     num_units: 1
     options:
@@ -43,17 +43,17 @@ services:
     expose: true
     num_units: 1
     options:
-      channel: 1.22/edge
+      channel: 1.23/edge
     to:
     - '0'
   kubernetes-worker:
-    charm: cs:~containers/kubernetes-worker
+    charm: kubernetes-worker
     channel: edge
     constraints: cores=4 mem=4G root-disk=16G
     expose: true
     num_units: 1
     options:
-      channel: 1.22/edge
+      channel: 1.23/edge
     to:
     - '1'
 relations:
