@@ -86,9 +86,12 @@ for arch in ${arches}; do
 
     # arm64 builds are failing due to an upstream issue:
     # https://github.com/projectcalico/calico-upgrade/issues/42
-    # For now, we will pull a previously built binary from the charm store.
-    wget https://api.jujucharms.com/charmstore/v5/~containers/calico-698/resource/calico-upgrade-arm64/462 \
-      -O calico-upgrade-arm64.tar.gz
+    # For now, we will pull a previously built binary from charmhub.
+    url="$(wget -O- \
+      'https://api.charmhub.io/v2/charms/info/calico?channel=latest/edge&fields=default-release.resources' \
+      | jq -r '."default-release".resources[] | select(.name == "calico-upgrade-arm64").download.url'
+    )"
+    wget "$url" -O calico-upgrade-arm64.tar.gz
     tar -xf calico-upgrade-arm64.tar.gz
     checksum="$(sha256sum calico-upgrade)"
     if [ "$checksum" != "7a07816c26ad19f526ab2f57353043dabd708a48185268b41493e458c59b797d  calico-upgrade" ]; then
