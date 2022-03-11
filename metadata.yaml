@@ -32,14 +32,6 @@ resources:
     type: file
     filename: calico.tar.gz
     description: 'Calico resource tarball for arm64'
-  calico-upgrade:
-    type: file
-    filename: calico-upgrade.tar.gz
-    description: 'calico-upgrade tool for amd64'
-  calico-upgrade-arm64:
-    type: file
-    filename: calico-upgrade.tar.gz
-    description: 'calico-upgrade tool for arm64'
   calico-node-image:
     type: file
     filename: calico-node-image.tar.gz
