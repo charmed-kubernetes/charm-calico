@@ -46,7 +46,6 @@ applications:
     charm: /tmp/charm-builds/calico
     resources:
       calico: /path/to/layer-calico/calico-amd64.tar.gz
-      calico-upgrade: /path/to/layer-calico/calico-upgrade-amd64.tar.gz
 ```
 
 Then deploy Charmed Kubernetes with your locally built calico charm:

@@ -67,47 +67,4 @@ done
 
 rm -rf release-$calico_version.tgz release-$calico_version
 
-# calico-upgrade resource
-for arch in ${arches}; do
-  rm -rf resource-build-upgrade
-  mkdir resource-build-upgrade
-  pushd resource-build-upgrade
-  if [ $arch = amd64 ]; then
-    fetch_and_validate \
-      https://github.com/projectcalico/calico-upgrade/releases/download/v1.0.5/calico-upgrade
-    chmod +x calico-upgrade
-  elif [ $arch = arm64 ]; then
-    # git clone https://github.com/projectcalico/calico-upgrade repo
-    # pushd repo
-    # git checkout 2de2f7a0f26ef3bb1c2cabf06b2dcbcc2bba1d35  # known good commit
-    # make build ARCH=arm64
-    # popd
-    # mv repo/dist/calico-upgrade-linux-$arch ./calico-upgrade
-
-    # arm64 builds are failing due to an upstream issue:
-    # https://github.com/projectcalico/calico-upgrade/issues/42
-    # For now, we will pull a previously built binary from charmhub.
-    url="$(wget -O- \
-      'https://api.charmhub.io/v2/charms/info/calico?channel=latest/edge&fields=default-release.resources' \
-      | jq -r '."default-release".resources[] | select(.name == "calico-upgrade-arm64").download.url'
-    )"
-    wget "$url" -O calico-upgrade-arm64.tar.gz
-    tar -xf calico-upgrade-arm64.tar.gz
-    checksum="$(sha256sum calico-upgrade)"
-    if [ "$checksum" != "7a07816c26ad19f526ab2f57353043dabd708a48185268b41493e458c59b797d  calico-upgrade" ]; then
-      echo 'ERROR: checksum does not match, aborting'
-      exit 1
-    fi
-  else
-    echo "Unsupported architecture for calico-upgrade: $arch"
-    exit 1
-  fi
-  tar -zcvf ../calico-upgrade-$arch.tar.gz ./calico-upgrade
-  popd
-  rm -rf resource-build-upgrade
-done
-
-# calico-upgrade arm64
-rm -rf resource-build-upgrade-arm64
-
 touch calico-node-image.tar.gz

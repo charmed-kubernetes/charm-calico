@@ -3,7 +3,6 @@ import yaml
 import gzip
 import traceback
 import ipaddress
-import calico_upgrade
 
 from conctl import getContainerRuntimeCtl
 from socket import gethostname
@@ -52,7 +51,6 @@ CALICOCTL_PATH = '/opt/calicoctl'
 ETCD_KEY_PATH = os.path.join(CALICOCTL_PATH, 'etcd-key')
 ETCD_CERT_PATH = os.path.join(CALICOCTL_PATH, 'etcd-cert')
 ETCD_CA_PATH = os.path.join(CALICOCTL_PATH, 'etcd-ca')
-CALICO_UPGRADE_DIR = '/opt/calico-upgrade'
 
 register_trigger(
     when="cni.kubeconfig.changed", clear_flag="calico.service.installed"
@@ -75,82 +73,17 @@ def upgrade_charm():
         os.remove('/etc/cni/net.d/10-calico.conf')
     except FileNotFoundError as e:
         log(e)
-    if is_leader() and not leader_get('calico-v3-data-ready'):
+    if is_leader():
         leader_set({
-            'calico-v3-data-migration-needed': True,
-            'calico-v3-npc-cleanup-needed': True,
-            'calico-v3-completion-needed': True
+            'calico-v3-data-migration-needed': None,
+            'calico-v3-npc-cleanup-needed': None,
+            'calico-v3-completion-needed': None,
+            'calico-v3-data-ready': None
         })
     cni = endpoint_from_name('cni')
     cni.manage_flags()
 
 
-@when('leadership.is_leader', 'leadership.set.calico-v3-data-migration-needed',
-      'etcd.available', 'calico.etcd-credentials.installed')
-def upgrade_v3_migrate_data():
-    status.maintenance('Migrating data to Calico 3')
-    try:
-        calico_upgrade.configure()
-        calico_upgrade.dry_run()
-        calico_upgrade.start()
-    except Exception:
-        log(traceback.format_exc())
-        message = 'Calico upgrade failed, see debug log'
-        status.blocked(message)
-        return
-    leader_set({'calico-v3-data-migration-needed': None})
-
-
-@when('leadership.is_leader')
-@when_not('leadership.set.calico-v3-data-migration-needed')
-def v3_data_ready():
-    leader_set({'calico-v3-data-ready': True})
-
-
-@when('leadership.is_leader', 'leadership.set.calico-v3-data-ready',
-      'leadership.set.calico-v3-npc-cleanup-needed')
-def upgrade_v3_npc_cleanup():
-    status.maintenance('Cleaning up Calico 2 policy controller')
-
-    resources = [
-        ('Deployment', 'kube-system', 'calico-policy-controller'),
-        ('ClusterRoleBinding', None, 'calico-policy-controller'),
-        ('ClusterRole', None, 'calico-policy-controller'),
-        ('ServiceAccount', 'kube-system', 'calico-policy-controller')
-    ]
-
-    for kind, namespace, name in resources:
-        args = ['delete', '--ignore-not-found', kind, name]
-        if namespace:
-            args += ['-n', namespace]
-        try:
-            kubectl(*args)
-        except CalledProcessError:
-            log('Failed to cleanup %s %s %s' % (kind, namespace, name))
-            return
-
-    leader_set({'calico-v3-npc-cleanup-needed': None})
-
-
-@when('leadership.is_leader', 'leadership.set.calico-v3-completion-needed',
-      'leadership.set.calico-v3-data-ready', 'calico.binaries.installed',
-      'calico.service.installed', 'calico.npc.deployed')
-@when_not('leadership.set.calico-v3-npc-cleanup-needed')
-def upgrade_v3_complete():
-    status.maintenance('Completing Calico 3 upgrade')
-    try:
-        calico_upgrade.configure()
-        calico_upgrade.complete()
-        calico_upgrade.cleanup()
-    except Exception:
-        log(traceback.format_exc())
-        message = 'Calico upgrade failed, see debug log'
-        status.blocked(message)
-        return
-    leader_set({'calico-v3-completion-needed': None})
-
-
-@when('leadership.set.calico-v3-data-ready')
 @when_not('calico.binaries.installed')
 def install_calico_binaries():
     ''' Unpack the Calico binaries. '''
@@ -287,7 +220,7 @@ def get_bind_address():
     return unit_private_ip()
 
 
-@when('leadership.is_leader', 'leadership.set.calico-v3-data-ready')
+@when('leadership.is_leader')
 @when_not('leadership.set.calico-node-token')
 def create_calico_node_token():
     ''' Create the system:calico-node user token '''
@@ -314,7 +247,7 @@ def create_calico_node_token():
 
 @when('calico.binaries.installed', 'etcd.available',
       'calico.etcd-credentials.installed', 'cni.kubeconfig.available',
-      'leadership.set.calico-node-token', 'leadership.set.calico-v3-data-ready')
+      'leadership.set.calico-node-token')
 @when_not('calico.service.installed')
 def install_calico_service():
     ''' Install the calico-node systemd service. '''
@@ -373,8 +306,7 @@ def ignore_loose_rpf_changed():
 
 
 @when('calico.binaries.installed', 'etcd.available',
-      'calico.etcd-credentials.installed',
-      'leadership.set.calico-v3-data-ready')
+      'calico.etcd-credentials.installed')
 @when_not('calico.pool.configured')
 def configure_calico_pool():
     ''' Configure Calico IP pool. '''
@@ -439,7 +371,7 @@ def reconfigure_calico_pool():
     remove_state('calico.pool.configured')
 
 
-@when('etcd.available', 'cni.connected', 'leadership.set.calico-v3-data-ready')
+@when('etcd.available', 'cni.connected')
 @when_not('calico.cni.configured')
 def configure_cni():
     ''' Configure Calico CNI. '''
@@ -470,8 +402,7 @@ def reconfigure_cni():
 
 
 @when('etcd.available', 'calico.cni.configured',
-      'calico.service.installed', 'leadership.is_leader',
-      'leadership.set.calico-v3-data-ready')
+      'calico.service.installed', 'leadership.is_leader')
 @when_not('calico.npc.deployed')
 def deploy_network_policy_controller():
     ''' Deploy the Calico network policy controller. '''
@@ -494,8 +425,7 @@ def deploy_network_policy_controller():
         log(str(e))
 
 
-@when('calico.binaries.installed', 'etcd.available',
-      'leadership.set.calico-v3-data-ready')
+@when('calico.binaries.installed', 'etcd.available')
 @when_not('calico.bgp.globals.configured')
 def configure_bgp_globals():
     status.maintenance('Configuring BGP globals')
@@ -551,8 +481,7 @@ def reconfigure_bgp_globals():
     remove_state('calico.bgp.globals.configured')
 
 
-@when('calico.binaries.installed', 'etcd.available',
-      'leadership.set.calico-v3-data-ready')
+@when('calico.binaries.installed', 'etcd.available')
 @when_not('calico.node.configured')
 def configure_node():
     status.maintenance('Configuring Calico node')
@@ -581,8 +510,7 @@ def reconfigure_node():
     remove_state('calico.node.configured')
 
 
-@when('calico.binaries.installed', 'etcd.available',
-      'leadership.set.calico-v3-data-ready')
+@when('calico.binaries.installed', 'etcd.available')
 @when_not('calico.bgp.peers.configured')
 def configure_bgp_peers():
     status.maintenance('Configuring BGP peers')
