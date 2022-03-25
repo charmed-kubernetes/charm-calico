@@ -35,4 +35,4 @@ to this project, the workflow is as follows:
 ## Documentation
 
 Documentation for this charm is currently maintained as part of the Charmed Kubernetes docs.
-See [this page](https://github.com/charmed-kubernetes/kubernetes-docs/blob/master/pages/k8s/charm-calico.md)
+See [this page](https://github.com/charmed-kubernetes/kubernetes-docs/blob/main/pages/k8s/charm-calico.md)
