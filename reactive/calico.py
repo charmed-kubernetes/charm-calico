@@ -591,6 +591,9 @@ def ready():
         'calico.cni.configured', 'calico.bgp.globals.configured',
         'calico.node.configured', 'calico.bgp.peers.configured'
     ]
+    if is_rpf_config_mismatched():
+        status.blocked('ignore-loose-rpf config is in conflict with rp_filter value')
+        return
     if is_state('upgrade.series.in-progress'):
         status.blocked('Series upgrade in progress')
         return
@@ -752,3 +755,14 @@ def get_network(cidr):
 def get_networks(cidrs):
     '''Convert a comma-separated list of CIDRs to a list of networks.'''
     return [get_network(cidr) for cidr in cidrs.split(',')]
+
+
+def is_rpf_config_mismatched():
+    with open('/proc/sys/net/ipv4/conf/all/rp_filter') as f:
+        rp_filter = int(f.read())
+    ignore_loose_rpf = charm_config('ignore-loose-rpf')
+    if rp_filter == 2 and not ignore_loose_rpf:
+        # calico says this is invalid
+        # https://github.com/kubernetes-sigs/kind/issues/891
+        return True
+    return False

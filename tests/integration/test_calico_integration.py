@@ -2,13 +2,13 @@ import asyncio
 import logging
 import os
 import pytest
+import pytest_asyncio
 import time
 import yaml
-
 log = logging.getLogger(__name__)
 
 
-@pytest.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module")
 async def build_all_charms(ops_test):
     charms = await asyncio.gather(
         ops_test.build_charm("."),
@@ -17,17 +17,18 @@ async def build_all_charms(ops_test):
     yield charms
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def calico_charm(build_all_charms):
     yield build_all_charms[0]
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def bird_charm(build_all_charms):
     yield build_all_charms[1]
 
 
 @pytest.mark.abort_on_fail
+@pytest.mark.skip_if_deployed
 async def test_build_and_deploy(ops_test, calico_charm):
     resource_path = ops_test.tmp_path / "charm-resources"
     resource_path.mkdir()
@@ -181,3 +182,29 @@ async def test_bgp_service_ip_advertisement(ops_test, bird_charm, kubernetes):
         'global-bgp-peers': '[]'
     })
     await bird_app.destroy()
+
+
+async def test_rp_filter_conflict(ops_test):
+    unit_number = 0
+    await ops_test.juju(
+        'ssh', f'calico/{unit_number}', 'sudo sysctl -w net.ipv4.conf.all.rp_filter=2',
+        check=True,
+        fail_msg="Failed to set rp_filter"
+    )
+
+    calico_app = ops_test.model.applications['calico']
+    # false is default, change it to true and back to false to trigger config changed
+    await calico_app.set_config({
+        'ignore-loose-rpf': "true",
+    })
+    await calico_app.set_config({
+        'ignore-loose-rpf': "false",
+    })
+
+    unit = calico_app.units[unit_number]
+
+    def blocked():
+        return unit.workload_status == 'blocked' and 'ignore-loose-rpf'\
+               in unit.workload_status_message
+
+    await ops_test.model.block_until(blocked, timeout=60)
