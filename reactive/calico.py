@@ -29,8 +29,7 @@ from charmhelpers.core.host import (
     arch,
     service,
     service_restart,
-    service_running,
-    lsb_release
+    service_running
 )
 from charmhelpers.core.templating import render
 from charms.layer import kubernetes_common, status
@@ -759,13 +758,11 @@ def get_networks(cidrs):
 
 
 def is_rpf_config_mismatched():
-    # This check should only apply on focal and above
-    release = lsb_release()
-    release_number = float(release['DISTRIB_RELEASE'])
-    if release_number >= 20.04:
-        with open('/proc/sys/net/ipv4/conf/all/rp_filter') as f:
-            rp_filter = int(f.read())
-        ignore_loose_rpf = charm_config('ignore-loose-rpf')
-        if rp_filter != 1 and not ignore_loose_rpf:
-            return True
+    with open('/proc/sys/net/ipv4/conf/all/rp_filter') as f:
+        rp_filter = int(f.read())
+    ignore_loose_rpf = charm_config('ignore-loose-rpf')
+    if rp_filter == 2 and not ignore_loose_rpf:
+        # calico says this is invalid
+        # https://github.com/kubernetes-sigs/kind/issues/891
+        return True
     return False

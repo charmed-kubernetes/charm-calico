@@ -28,6 +28,7 @@ async def bird_charm(build_all_charms):
 
 
 @pytest.mark.abort_on_fail
+@pytest.mark.skip_if_deployed
 async def test_build_and_deploy(ops_test, calico_charm):
     resource_path = ops_test.tmp_path / "charm-resources"
     resource_path.mkdir()
@@ -185,12 +186,11 @@ async def test_bgp_service_ip_advertisement(ops_test, bird_charm, kubernetes):
 
 async def test_rp_filter_conflict(ops_test):
     unit_number = 0
-    retcode, stdout, stderr = await ops_test.run(
-        'juju', 'ssh', '-m', ops_test.model_full_name, f'calico/{unit_number}',
-        'sudo', 'sysctl', '-w', 'net.ipv4.conf.all.rp_filter=2'
+    await ops_test.juju(
+        'ssh', f'calico/{unit_number}', 'sudo sysctl -w net.ipv4.conf.all.rp_filter=2',
+        check=True,
+        fail_msg="Failed to set rp_filter"
     )
-    if retcode != 0:
-        pytest.fail(f"Failed to set rp_filter\n stdout: {stdout}\n stderr: {stderr}")
 
     calico_app = ops_test.model.applications['calico']
     # false is default, change it to true and back to false to trigger config changed

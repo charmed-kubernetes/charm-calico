@@ -1,6 +1,5 @@
 from charmhelpers.core.hookenv import is_leader, config  # patched
 from charmhelpers.core.host import service_running  # patched
-from charmhelpers.core.host import lsb_release  # patched
 from reactive import calico
 from unittest.mock import patch, mock_open
 
@@ -20,55 +19,35 @@ def test_series_upgrade():
 
 
 def test_ignore_loose_rpf_at_exit():
-    # Test case where release is less than 20.04
-    with patch("builtins.open", mock_open(read_data="1")):
-        calico.status.reset_mock()
-        lsb_release.return_value = {"DISTRIB_RELEASE": "18.04"}
-        calico.ready()
-        assert calico.status.blocked.call_count == 0
-
     # Test the case when charm should be blocked
-    # i.e. when rp filter != 1 and ignore-loose-rpf is false
+    # i.e. when rp filter == 2 and ignore-loose-rpf is false
     with patch("builtins.open", mock_open(read_data="2")):
         calico.status.reset_mock()
         # config.return value returns the config setting for ignore-loose-rpf
         config.return_value = False
-        lsb_release.return_value = {"DISTRIB_RELEASE": "20.04"}
         calico.ready()
         assert calico.status.blocked.call_count == 1
 
-    # Test above case with release greater than 20.04
-    with patch("builtins.open", mock_open(read_data="2")):
-        calico.status.reset_mock()
-        # config.return value returns the config setting for ignore-loose-rpf
-        config.return_value = False
-        lsb_release.return_value = {"DISTRIB_RELEASE": "21.04"}
-        calico.ready()
-        assert calico.status.blocked.call_count == 1
-
-    # Test the case when rp filter == 1 and ignore-loose-rpf is false
+    # Test the case when rp filter != 2 and ignore-loose-rpf is false
     with patch("builtins.open", mock_open(read_data="1")):
         calico.status.reset_mock()
         # config.return value returns the config setting for ignore-loose-rpf
         config.return_value = False
-        lsb_release.return_value = {"DISTRIB_RELEASE": "20.04"}
         calico.ready()
         assert calico.status.blocked.call_count == 0
 
-    # Test the case when rp filter != 1 and ignore-loose-rpf is true
+    # Test the case when rp filter == 2 and ignore-loose-rpf is true
     with patch("builtins.open", mock_open(read_data="2")):
         calico.status.reset_mock()
         # config.return value returns the config setting for ignore-loose-rpf
         config.return_value = True
-        lsb_release.return_value = {"DISTRIB_RELEASE": "20.04"}
         calico.ready()
         assert calico.status.blocked.call_count == 0
 
-    # Test the case when rp filter == 1 and ignore-loose-rpf is true
+    # Test the case when rp filter != 2 and ignore-loose-rpf is true
     with patch("builtins.open", mock_open(read_data="1")):
         calico.status.reset_mock()
         # config.return value returns the config setting for ignore-loose-rpf
         config.return_value = True
-        lsb_release.return_value = {"DISTRIB_RELEASE": "20.04"}
         calico.ready()
         assert calico.status.blocked.call_count == 0
