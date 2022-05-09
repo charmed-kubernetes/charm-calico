@@ -74,6 +74,11 @@ options:
       Network CIDR assigned to Calico. This is applied to the default Calico
       pool, and is also communicated to the Kubernetes charms for use in
       kube-proxy configuration.
+
+      Calico assigns IP addresses to Kubernetes nodes in blocks of 64 addresses.
+      It is recommended to make the Calico network large enough to assign at
+      least one 64 address block to each kubernetes-control-plane and
+      kubernetes-worker unit.
   manage-pools:
     type: boolean
     default: true
