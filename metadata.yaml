@@ -16,6 +16,7 @@ tags:
 subordinate: true
 series:
   - focal
+  - jammy
   - bionic
   - xenial
 requires:
