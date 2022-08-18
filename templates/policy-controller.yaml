@@ -216,6 +216,7 @@ metadata:
 
 # This manifest creates a Pod Disruption Budget for Controller to allow K8s Cluster Autoscaler to evict
 
+# CK edit: PodDisruptionBudget policy/v1beta1 is no longer served in k8s 1.25. Use policy/v1 instead, available since k8s 1.21
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
