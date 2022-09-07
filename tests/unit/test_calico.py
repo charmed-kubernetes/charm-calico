@@ -55,10 +55,12 @@ def test_ignore_loose_rpf_at_exit():
 
 def test_publish_version_to_juju():
     with patch.object(calico, 'calicoctl') as mock_calicoctl:
-        mock_calicoctl.return_value = (b'Client Version:    v3.21.4\n'
-        b'Git commit:        220d04c94\n'
-        b'Cluster Version:   v3.21.4\n'
-        b'Cluster Type:      k8s')
+        mock_calicoctl.return_value = (
+            b'Client Version:    v3.21.4\n'
+            b'Git commit:        220d04c94\n'
+            b'Cluster Version:   v3.21.4\n'
+            b'Cluster Type:      k8s'
+        )
 
         with patch.object(calico, 'application_version_set') as mock_set_version:
             calico.publish_version_to_juju()
