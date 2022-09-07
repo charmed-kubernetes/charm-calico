@@ -1,4 +1,5 @@
 import os
+import re
 import yaml
 import gzip
 import traceback
@@ -15,6 +16,7 @@ from charms.reactive import endpoint_from_flag, endpoint_from_name
 from charms.reactive import data_changed, any_file_changed
 from charms.reactive import register_trigger
 from charmhelpers.core.hookenv import (
+    application_version_set,
     log,
     resource_get,
     network_get,
@@ -677,6 +679,30 @@ def disable_vxlan_tx_checksumming():
             msg = 'Waiting to retry disabling VXLAN TX checksumming'
             log(msg)
             status.waiting(msg)
+
+
+@when('calico.ctl.ready', 'etcd.available')
+@when_not('calico.version-published')
+def publish_version_to_juju():
+    try:
+        output = calicoctl('version')
+        if not output:
+            return
+        output = output.decode()
+
+        ver_re = re.compile(r'Cluster Version:\s+v([\d+\.]+)+')
+        version_matches = set(
+            m.group(1) for m in (ver_re.match(line) for line in output.split('\n')) if m
+        )
+        if len(version_matches) != 1:
+            return
+
+        (version,) = version_matches
+        application_version_set(version)
+        set_state('calico.version-published')
+
+    except (FileNotFoundError, CalledProcessError):
+        log('Calico version not available')
 
 
 def calicoctl_get(*args):
