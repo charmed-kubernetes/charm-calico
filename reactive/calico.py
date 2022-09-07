@@ -681,7 +681,7 @@ def disable_vxlan_tx_checksumming():
             status.waiting(msg)
 
 
-@when('calico.ctl.ready')
+@when('calico.ctl.ready', 'etcd.available')
 @when_not('calico.version-published')
 def publish_version_to_juju():
     try:
