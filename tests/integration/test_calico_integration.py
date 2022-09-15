@@ -2,34 +2,16 @@ import asyncio
 import logging
 import os
 import pytest
-import pytest_asyncio
 import time
 import yaml
 log = logging.getLogger(__name__)
 
 
-@pytest_asyncio.fixture(scope="module")
-async def build_all_charms(ops_test):
-    charms = await asyncio.gather(
-        ops_test.build_charm("."),
-        ops_test.build_charm("tests/data/bird-operator")
-    )
-    yield charms
-
-
-@pytest_asyncio.fixture
-async def calico_charm(build_all_charms):
-    yield build_all_charms[0]
-
-
-@pytest_asyncio.fixture
-async def bird_charm(build_all_charms):
-    yield build_all_charms[1]
-
-
 @pytest.mark.abort_on_fail
 @pytest.mark.skip_if_deployed
-async def test_build_and_deploy(ops_test, calico_charm):
+async def test_build_and_deploy(ops_test):
+    log.info("Building charm")
+    calico_charm = await ops_test.build_charm(".")
     resource_path = ops_test.tmp_path / "charm-resources"
     resource_path.mkdir()
     resource_build_script = os.path.abspath("./build-calico-resource.sh")
@@ -61,7 +43,7 @@ async def test_build_and_deploy(ops_test, calico_charm):
         pytest.fail("Failed to deploy bundle")
 
     try:
-        await ops_test.model.wait_for_idle(wait_for_active=True, timeout=60 * 60)
+        await ops_test.model.wait_for_idle(status="active", timeout=60 * 60)
     except asyncio.TimeoutError:
         k8s_cp = "kubernetes-control-plane"
         assert k8s_cp in ops_test.model.applications
@@ -86,7 +68,7 @@ async def juju_run(unit, cmd):
     return stdout
 
 
-async def test_bgp_service_ip_advertisement(ops_test, bird_charm, kubernetes):
+async def test_bgp_service_ip_advertisement(ops_test, kubernetes):
     # deploy a test service in k8s (nginx)
     deployment = {
         'apiVersion': 'apps/v1',
@@ -140,8 +122,12 @@ async def test_bgp_service_ip_advertisement(ops_test, bird_charm, kubernetes):
     service_ip = kubernetes.read_object(service).spec.cluster_ip
 
     # deploy bird charm
-    await ops_test.model.deploy(bird_charm)
-    await ops_test.model.wait_for_idle(wait_for_active=True, timeout=60 * 10)
+    await ops_test.model.deploy(entity_url="bird", channel="stable", num_units=1)
+    await ops_test.model.block_until(
+        lambda: "bird" in ops_test.model.applications,
+        timeout=60
+    )
+    await ops_test.model.wait_for_idle(status="active", timeout=60 * 10)
 
     # configure calico to peer with bird
     k8s_cp = "kubernetes-control-plane"

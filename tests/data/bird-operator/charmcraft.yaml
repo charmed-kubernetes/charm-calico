@@ -1,4 +1,0 @@
-type: charm
-bases:
-- name: ubuntu
-  channel: "20.04"
