@@ -70,6 +70,7 @@ def upgrade_charm():
     remove_state('calico.bgp.globals.configured')
     remove_state('calico.node.configured')
     remove_state('calico.bgp.peers.configured')
+    remove_state('calico.version-published')
     try:
         log('Deleting /etc/cni/net.d/10-calico.conf')
         os.remove('/etc/cni/net.d/10-calico.conf')
@@ -681,7 +682,7 @@ def disable_vxlan_tx_checksumming():
             status.waiting(msg)
 
 
-@when('calico.ctl.ready', 'etcd.available')
+@when('calico.ctl.ready', 'calico.binaries.installed', 'etcd.available')
 @when_not('calico.version-published')
 def publish_version_to_juju():
     try:
