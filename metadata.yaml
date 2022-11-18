@@ -15,9 +15,8 @@ tags:
   - networking
 subordinate: true
 series:
-  - focal
   - jammy
-  - bionic
+  - focal
 requires:
   etcd:
     interface: etcd
