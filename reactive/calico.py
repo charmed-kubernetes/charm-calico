@@ -7,7 +7,7 @@ import ipaddress
 
 from conctl import getContainerRuntimeCtl
 from socket import gethostname
-from subprocess import check_call, check_output, CalledProcessError, STDOUT
+from subprocess import check_call, check_output, CalledProcessError
 
 from charms.leadership import leader_get, leader_set
 from charms.reactive import when, when_not, when_any, set_state, remove_state
@@ -617,7 +617,7 @@ def calicoctl(*args):
     env = os.environ.copy()
     env.update(get_calicoctl_env())
     try:
-        return check_output(cmd, env=env, stderr=STDOUT)
+        return check_output(cmd, env=env)
     except CalledProcessError as e:
         log(e.output)
         raise
@@ -709,7 +709,11 @@ def publish_version_to_juju():
 def calicoctl_get(*args):
     args = ['get', '-o', 'yaml', '--export'] + list(args)
     output = calicoctl(*args)
-    result = yaml.safe_load(output)
+    try:
+        result = yaml.safe_load(output)
+    except yaml.parser.ParserError:
+        log('Failed to parse calicoctl output as yaml:\n' + output, level='ERROR')
+        raise
     return result
 
 
