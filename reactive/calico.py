@@ -7,7 +7,7 @@ import ipaddress
 
 from conctl import getContainerRuntimeCtl
 from socket import gethostname
-from subprocess import check_call, check_output, CalledProcessError
+from subprocess import check_call, check_output, CalledProcessError, PIPE
 
 from charms.leadership import leader_get, leader_set
 from charms.reactive import when, when_not, when_any, set_state, remove_state
@@ -438,7 +438,7 @@ def configure_bgp_globals():
         try:
             bgp_config = calicoctl_get('bgpconfig', 'default')
         except CalledProcessError as e:
-            if b'resource does not exist' in e.output:
+            if b'resource does not exist' in e.stderr:
                 log('default BGPConfiguration does not exist')
                 bgp_config = {
                     'apiVersion': 'projectcalico.org/v3',
@@ -617,8 +617,9 @@ def calicoctl(*args):
     env = os.environ.copy()
     env.update(get_calicoctl_env())
     try:
-        return check_output(cmd, env=env)
+        return check_output(cmd, env=env, stderr=PIPE)
     except CalledProcessError as e:
+        log(e.stderr)
         log(e.output)
         raise
 
