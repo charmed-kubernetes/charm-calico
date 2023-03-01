@@ -355,7 +355,7 @@ def configure_calico_pool():
             }
 
             calicoctl_apply(pool)
-    except CalledProcessError:
+    except (CalledProcessError, TimeoutError):
         log(traceback.format_exc())
         if config['ipip'] != 'Never' and config['vxlan'] != 'Never':
             status.blocked('ipip and vxlan configs are in conflict')
@@ -437,7 +437,7 @@ def configure_bgp_globals():
     try:
         try:
             bgp_config = calicoctl_get('bgpconfig', 'default')
-        except CalledProcessError as e:
+        except (CalledProcessError, TimeoutError) as e:
             if b'resource does not exist' in e.stderr:
                 log('default BGPConfiguration does not exist')
                 bgp_config = {
@@ -467,7 +467,7 @@ def configure_bgp_globals():
             for cidr in config['bgp-service-loadbalancer-ips'].split()
         ]
         calicoctl_apply(bgp_config)
-    except CalledProcessError:
+    except (CalledProcessError, TimeoutError):
         log(traceback.format_exc())
         status.waiting('Waiting to retry BGP global configuration')
         return
@@ -499,7 +499,7 @@ def configure_node():
         node['spec']['bgp']['routeReflectorClusterID'] = \
             route_reflector_cluster_id
         calicoctl_apply(node)
-    except CalledProcessError:
+    except (CalledProcessError, TimeoutError):
         log(traceback.format_exc())
         status.waiting('Waiting to retry Calico node configuration')
         return
@@ -573,7 +573,7 @@ def configure_bgp_peers():
 
         for peer in peers_to_delete:
             calicoctl('delete', 'bgppeer', peer)
-    except CalledProcessError:
+    except (CalledProcessError, TimeoutError):
         log(traceback.format_exc())
         status.waiting('Waiting to retry BGP peer configuration')
         return
@@ -612,13 +612,18 @@ def ready():
     status.active('Calico is active')
 
 
-def calicoctl(*args):
+def calicoctl(*args, timeout: int = 60):
+    """Call calicoctl with specified args.
+
+    @param int timeout: If the process does not terminate after timeout seconds,
+                        raise a TimeoutExpired exception
+    """
     cmd = ['/opt/calicoctl/calicoctl'] + list(args)
     env = os.environ.copy()
     env.update(get_calicoctl_env())
     try:
-        return check_output(cmd, env=env, stderr=PIPE)
-    except CalledProcessError as e:
+        return check_output(cmd, env=env, stderr=PIPE, timeout=timeout)
+    except (CalledProcessError, TimeoutError) as e:
         log(e.stderr)
         log(e.output)
         raise
@@ -703,7 +708,7 @@ def publish_version_to_juju():
         application_version_set(version)
         set_state('calico.version-published')
 
-    except (FileNotFoundError, CalledProcessError):
+    except (FileNotFoundError, CalledProcessError, TimeoutError):
         log('Calico version not available')
 
 
