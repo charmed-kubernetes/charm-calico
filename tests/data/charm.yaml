@@ -1,0 +1,12 @@
+description: A minimal two-machine Kubernetes cluster, appropriate for development.
+series: &series {{ series }}
+services:
+  calico:
+    charm: {{calico_charm}}
+    resources:
+      calico: {{resource_path}}/calico-amd64.tar.gz
+      calico-arm64: {{resource_path}}/calico-arm64.tar.gz
+      calico-node-image: {{resource_path}}/calico-node-image.tar.gz
+    options:
+      ignore-loose-rpf: true
+      vxlan: Always

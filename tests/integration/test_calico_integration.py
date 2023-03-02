@@ -1,7 +1,9 @@
 import asyncio
 import logging
 import os
+from pathlib import Path
 import pytest
+import shlex
 import time
 import yaml
 log = logging.getLogger(__name__)
@@ -9,9 +11,10 @@ log = logging.getLogger(__name__)
 
 @pytest.mark.abort_on_fail
 @pytest.mark.skip_if_deployed
-async def test_build_and_deploy(ops_test):
+async def test_build_and_deploy(ops_test, k8s_core_bundle, series):
     log.info("Building charm")
     calico_charm = await ops_test.build_charm(".")
+
     resource_path = ops_test.tmp_path / "charm-resources"
     resource_path.mkdir()
     resource_build_script = os.path.abspath("./build-calico-resource.sh")
@@ -25,17 +28,23 @@ async def test_build_and_deploy(ops_test):
         log.error(f"stdout:\n{stdout.strip()}")
         log.error(f"stderr:\n{stderr.strip()}")
         pytest.fail("Failed to build charm resources")
-    bundle = ops_test.render_bundle(
-        "tests/data/bundle.yaml",
+
+    log.info("Build Bundle...")
+    bundle, *overlays = await ops_test.async_render_bundles(
+        k8s_core_bundle,
+        Path("tests/data/charm.yaml"),
         calico_charm=calico_charm,
+        series=series,
         resource_path=resource_path
     )
-    # deploy with Juju CLI because libjuju does not support local resource
-    # paths in bundles
+
     log.info("Deploying bundle")
-    retcode, stdout, stderr = await ops_test.run(
-        "juju", "deploy", "-m", ops_test.model_full_name, bundle
+    model = ops_test.model_full_name
+    cmd = f"juju deploy -m {model} {bundle} " + " ".join(
+        f"--overlay={f}" for f in overlays
     )
+    retcode, stdout, stderr = await ops_test.run(*shlex.split(cmd))
+
     if retcode != 0:
         log.error(f"retcode: {retcode}")
         log.error(f"stdout:\n{stdout.strip()}")
@@ -60,11 +69,16 @@ async def test_build_and_deploy(ops_test):
 
 
 async def juju_run(unit, cmd):
-    result = await unit.run(cmd)
-    code = result.results["Code"]
-    stdout = result.results.get("Stdout")
-    stderr = result.results.get("Stderr")
-    assert code == "0", f"{cmd} failed ({code}): {stderr or stdout}"
+    action = await unit.run(cmd)
+    await action.wait()
+    code = action.results.get("Code", action.results.get("return-code"))
+    if code is None:
+        log.error(f"Failed to find the return code in {action.results}")
+        return -1
+    code = int(code)
+    stdout = action.results.get("Stdout", action.results.get("stdout")) or ""
+    stderr = action.results.get("Stderr", action.results.get("stderr")) or ""
+    assert code == 0, f"{cmd} failed ({code}): {stderr or stdout}"
     return stdout
 
 
