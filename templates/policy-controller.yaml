@@ -1,16 +1,17 @@
 # Calico manifest for Charmed Kubernetes.
 #
-# Pulled from upstream on 2022-01-24 at
-# https://docs.projectcalico.org/archive/v3.21/manifests/calico-etcd.yaml
+# Pulled from upstream on 2023-05-26 at
+# https://github.com/projectcalico/calico/blob/v3.25.1/manifests/calico-etcd.yaml
 #
 # Search "CK edit" to find all the changes that were made for this charm.
+---
+# CK edit: Remove the calico-node ServiceAccount
 ---
 # CK edit: Remove calico-etcd-secrets secret
 ---
 # CK edit: Remove calico-config ConfigMap
 ---
 # Source: calico/templates/calico-kube-controllers-rbac.yaml
-
 # Include a clusterrole for the kube-controllers component,
 # and bind it to the calico-kube-controllers serviceaccount.
 kind: ClusterRole
@@ -38,21 +39,6 @@ rules:
     verbs:
       - watch
       - list
----
-kind: ClusterRoleBinding
-apiVersion: rbac.authorization.k8s.io/v1
-metadata:
-  name: calico-kube-controllers
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: calico-kube-controllers
-subjects:
-- kind: ServiceAccount
-  name: calico-kube-controllers
-  namespace: kube-system
----
-
 ---
 # Source: calico/templates/calico-node-rbac.yaml
 # Include a clusterrole for the calico-node DaemonSet,
@@ -100,6 +86,21 @@ rules:
       - patch
 
 ---
+# Source: calico/templates/calico-kube-controllers-rbac.yaml
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: calico-kube-controllers
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: calico-kube-controllers
+subjects:
+- kind: ServiceAccount
+  name: calico-kube-controllers
+  namespace: kube-system
+---
+# Source: calico/templates/calico-node-rbac.yaml
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
@@ -115,8 +116,6 @@ subjects:
 
 ---
 # CK edit: Remove the calico-node DaemonSet
----
-# CK edit: Remove the calico-node ServiceAccount
 ---
 # Source: calico/templates/calico-kube-controllers.yaml
 # See https://github.com/projectcalico/kube-controllers
@@ -157,6 +156,8 @@ spec:
           operator: Exists
         # wokeignore:rule=master - CK edit: pass woke check
         - key: node-role.kubernetes.io/master
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
           effect: NoSchedule
       serviceAccountName: calico-kube-controllers
       priorityClassName: system-cluster-critical
@@ -205,7 +206,7 @@ spec:
           hostPath:
             path: /opt/calicoctl
 ---
-
+# Source: calico/templates/calico-kube-controllers.yaml
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -213,10 +214,9 @@ metadata:
   namespace: kube-system
 
 ---
-
+# Source: calico/templates/calico-kube-controllers.yaml
 # This manifest creates a Pod Disruption Budget for Controller to allow K8s Cluster Autoscaler to evict
 
-# CK edit: PodDisruptionBudget policy/v1beta1 is no longer served in k8s 1.25. Use policy/v1 instead, available since k8s 1.21
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -229,14 +229,3 @@ spec:
   selector:
     matchLabels:
       k8s-app: calico-kube-controllers
-
----
-# Source: calico/templates/calico-typha.yaml
-
----
-# Source: calico/templates/configure-canal.yaml
-
----
-# Source: calico/templates/kdd-crds.yaml
-
-

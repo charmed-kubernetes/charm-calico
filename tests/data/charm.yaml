@@ -1,7 +1,8 @@
 description: A minimal two-machine Kubernetes cluster, appropriate for development.
 series: &series {{ series }}
-services:
+applications:
   calico:
+    channel: null
     charm: {{calico_charm}}
     resources:
       calico: {{resource_path}}/calico-amd64.tar.gz
