@@ -1,22 +1,52 @@
-"""TODO: Add a proper docstring here.
+# Copyright 2023 Canonical Ltd.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-This is a placeholder docstring for this charm library. Docstrings are
-presented on Charmhub and updated whenever you push a new version of the
-library.
+"""Charm library for the etcd reactive relation.
 
-Complete documentation about creating and documenting libraries can be found
-in the SDK docs at https://juju.is/docs/sdk/libraries.
+The module defines an interface for a charm that requires the etcd relation.
+It encapsulates the functionality and events related to managing the etcd relation,
+including connection, availability of data, and handling of TLS credentials.
 
-See `charmcraft publish-lib` and `charmcraft fetch-lib` for details of how to
-share and consume charm libraries. They serve to enhance collaboration
-between charmers. Use a charmer's libraries for classes that handle
-integration with their charm.
+It uses events to handle state changes in the etcd relation, such as when a connection is
+established (`EtcdConnected`), when etcd data is available (`EtcdAvailable`), and when TLS data
+for etcd is available (`EtcdTLSAvailable`).
 
-Bear in mind that new revisions of the different major API versions (v0, v1,
-v2 etc) are maintained independently.  You can continue to update v0 and v1
-after you have pushed v3.
+A class `EtcdReactiveRequires` is defined, which provides an abstraction over the charm's
+requires relation to etcd. It encapsulates the functionality to check the status of the
+relation, get connection details, and handle client credentials.
 
-Markdown is supported, following the CommonMark specification.
+This module also provides helper methods for handling client credentials, such as
+saving them to local files and retrieving them from the relation data.
+
+You can use this charm library in your charm by adding it as a dependency in your
+`charmcraft.yaml` file and then importing the relevant classes and functions.
+
+Example usage:
+```python
+from charms.kubernetes_libs.v0.etcd import EtcdReactiveRequires
+
+...
+    def __init__(self, *args):
+        self.etcd = EtcdReactiveRequires(self)
+        ...
+        # Handle the events from the relation
+        self.framework.observe(self.etcd.on.connected, self._on_etcd_connected)
+        self.framework.observe(self.etcd.on.available, self._on_etcd_available)
+        self.framework.observe(self.etcd.on.tls_available, self._on_etcd_tls_available)
+
+```
+
 """
 
 import hashlib

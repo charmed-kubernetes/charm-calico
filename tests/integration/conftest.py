@@ -1,9 +1,10 @@
-from kubernetes_wrapper import Kubernetes
 import logging
-import pytest
 import random
 import string
+
+import pytest
 import yaml
+from kubernetes_wrapper import Kubernetes
 
 log = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ def k8s_core_bundle(ops_test):
 @pytest.fixture(scope="module")
 @pytest.mark.asyncio
 async def k8s_core_yaml(ops_test, k8s_core_bundle):
-    """Download and render the kubernetes-core bundle, return it's full yaml"""
+    """Download and render the kubernetes-core bundle, return it's full yaml."""
     (bundle_path,) = await ops_test.async_render_bundles(k8s_core_bundle)
     return yaml.safe_load(bundle_path.read_text())
 
@@ -59,17 +60,10 @@ async def kubernetes(ops_test):
         f.write(action.results["kubeconfig"])
 
     namespace = "test-calico-integration-" + "".join(
-        random.choice(string.ascii_lowercase + string.digits)
-        for _ in range(5)
+        random.choice(string.ascii_lowercase + string.digits) for _ in range(5)
     )
     kubernetes = Kubernetes(namespace, kubeconfig=str(kubeconfig_path))
-    namespace_object = {
-        'apiVersion': 'v1',
-        'kind': 'Namespace',
-        'metadata': {
-            'name': namespace
-        }
-    }
+    namespace_object = {"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": namespace}}
     kubernetes.apply_object(namespace_object)
     yield kubernetes
     kubernetes.delete_object(namespace_object)

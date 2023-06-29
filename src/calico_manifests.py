@@ -21,6 +21,7 @@ class PatchCalicoConflist(Patch):
         log.info("Patching Calico Conflist.")
         data = obj.data
         if not data:
+            log.warning("calico-config: Unable to patch conflist, data not found.")
             return
 
         json_config = data.get("cni_network_config")
@@ -53,6 +54,9 @@ class SetEtcdEndpoints(Patch):
 
         uri = self.manifests.etcd.get_connection_string()
         data = obj.data
+        if not data:
+            log.warning("calico-config: Unable to patch etcd endpoints, data not found.")
+            return
         data.update({"etcd_endpoints": uri})
 
 
@@ -87,7 +91,7 @@ class SetEtcdSecrets(Patch):
         """
         if not data:
             return ""
-        return b64encode(data.encode("utf-8")).decode("utf-8")
+        return b64encode(data.encode()).decode()
 
 
 class CalicoManifests(Manifests):

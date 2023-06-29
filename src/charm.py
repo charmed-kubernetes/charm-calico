@@ -19,17 +19,10 @@ import ops
 import yaml
 from calico_manifests import CalicoManifests
 from charms.kubernetes_libs.v0.etcd import EtcdReactiveRequires
-from charms.kubernetes_libs.v0.kubernetes_client_helpers import (
-    KubernetesClientHelpers,
-)
-from charms.operator_libs_linux.v1.systemd import (
-    daemon_reload,
-    service_running,
-    service_stop,
-)
+from charms.operator_libs_linux.v1.systemd import daemon_reload, service_running, service_stop
 from ops.framework import StoredState
 from ops.manifests import Collector, ManifestClientError
-from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, ModelError
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, ModelError, WaitingStatus
 
 log = logging.getLogger(__name__)
 
@@ -60,17 +53,21 @@ class CalicoCharm(ops.CharmBase):
             ncp_deployed=False,
             deployed=False,
         )
-        self.calico_manifests = CalicoManifests(
-            self, self.config, self.etcd, self.cni_options
-        )
+        self.calico_manifests = CalicoManifests(self, self.config, self.etcd, self.cni_options)
         self.collector = Collector(self.calico_manifests)
 
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
+
         self.framework.observe(self.etcd.on.connected, self._on_etcd_connected)
         self.framework.observe(self.etcd.on.available, self._update_calicoctl_env)
         self.framework.observe(self.etcd.on.tls_available, self._on_etcd_changed)
+
+        self.framework.observe(self.on.list_versions_action, self._list_versions)
+        self.framework.observe(self.on.list_resources_action, self._list_resources)
+        self.framework.observe(self.on.scrub_resources_action, self._scrub_resources)
+        self.framework.observe(self.on.sync_resources_action, self._sync_resources)
 
     def _on_etcd_changed(self, event):
         self.unit.status = MaintenanceStatus("Updating etcd configuration.")
@@ -130,6 +127,7 @@ class CalicoCharm(ops.CharmBase):
 
         # Ensure kubeconfig status before moving ahead.
         if not self._get_kubeconfig_status():
+            self.unit.status = WaitingStatus("K8s API unavailable")
             log.info("Kubeconfig unavailable, will retry.")
             event.defer()
             return
@@ -192,32 +190,34 @@ class CalicoCharm(ops.CharmBase):
     def _remove_calico_reactive(self):
         self.unit.status = MaintenanceStatus("Removing Reactive resources.")
 
-        service_path = os.path.join(
-            os.sep, "lib", "systemd", "system", "calico-node.service"
-        )
+        service_path = os.path.join(os.sep, "lib", "systemd", "system", "calico-node.service")
         service_name = "calico-node"
         if service_running(service_name):
             if service_stop(service_name):
                 log.info(f"{service_name} service stopped.")
         else:
-            log.warning(f"{service_name} service is not running.")
+            log.info(f"{service_name} service successfully stopped.")
 
         if os.path.isfile(service_path):
             os.remove(service_path)
             daemon_reload()
             log.info(f"{service_name} service removed and daemon reloaded.")
         else:
-            log.warning(f"{service_name} service does not exist.")
+            log.info(f"{service_name} service successfully uninstalled.")
 
         # Remove calico-node binaries
-        if os.path.isfile(CNI_BIN_PATH + "calico"):
-            os.remove(CNI_BIN_PATH + "calico")
+        calico_path = os.path.join(os.sep, CNI_BIN_PATH, "calico")
+        if os.path.isfile(calico_path):
+            os.remove(calico_path)
+            log.info("calico binary uninstalled.")
         else:
-            log.warning("calico binary does not exist.")
-        if os.path.isfile(CNI_BIN_PATH + "calico-ipam"):
-            os.remove(CNI_BIN_PATH + "calico-ipam")
+            log.info("calico binary successfully uninstalled.")
+        ipam_path = os.path.join(os.sep, CNI_BIN_PATH, "calico-ipam")
+        if os.path.isfile(ipam_path):
+            os.remove(ipam_path)
+            log.info("calico-ipam binary uninstalled.")
         else:
-            log.warning("calico-ipam binary does not exist.")
+            log.info("calico-ipam binary successfully uninstalled.")
 
     def _get_ip_versions(self) -> Set[int]:
         return {net.version for net in self._get_networks(self.config["cidr"])}
@@ -276,16 +276,13 @@ class CalicoCharm(ops.CharmBase):
             raise e
 
     def _get_route_reflector_cluster_id(self):
-        route_reflector_cluster_ids = yaml.safe_load(
-            self.config["route-reflector-cluster-ids"]
-        )
+        route_reflector_cluster_ids = yaml.safe_load(self.config["route-reflector-cluster-ids"])
         unit_id = self._get_unit_id()
         return route_reflector_cluster_ids.get(unit_id)
 
     def _get_unit_as_number(self):
         unit_id = self._get_unit_id()
         unit_as_numbers = yaml.safe_load(self.config["unit-as-numbers"])
-        # Raise if the user made a mistake?
         if unit_id in unit_as_numbers:
             return unit_as_numbers[unit_id]
 
@@ -366,8 +363,7 @@ class CalicoCharm(ops.CharmBase):
                     if peer.startswith(safe_unit_name + "-") and peer not in named_peers
                 ]
                 existing_peers = {
-                    peer["metadata"]["name"]
-                    for peer in self._calicoctl_get("bgppeers")["items"]
+                    peer["metadata"]["name"] for peer in self._calicoctl_get("bgppeers")["items"]
                 }
                 peers_to_delete = [
                     peer
@@ -402,10 +398,7 @@ class CalicoCharm(ops.CharmBase):
         self.stored.cni_configured = True
 
     def _disable_vxlan_tx_checksumming(self):
-        if (
-            self.config["disable-vxlan-tx-checksumming"]
-            and self.config["vxlan"] != "Never"
-        ):
+        if self.config["disable-vxlan-tx-checksumming"] and self.config["vxlan"] != "Never":
             cmd = ["ethtool", "-K", "vxlan.calico", "tx-checksum-ip-generic", "off"]
             try:
                 subprocess.check_call(cmd)
@@ -435,8 +428,7 @@ class CalicoCharm(ops.CharmBase):
             pool_names_to_delete = [
                 pool["metadata"]["name"]
                 for pool in pools
-                if pool["metadata"]["name"] not in names
-                or pool["spec"]["cidr"] not in cidrs
+                if pool["metadata"]["name"] not in names or pool["spec"]["cidr"] not in cidrs
             ]
 
             for pool_name in pool_names_to_delete:
@@ -527,8 +519,29 @@ class CalicoCharm(ops.CharmBase):
         tar.extractall(destination)
         tar.close()
 
+    def _list_versions(self, event):
+        self.collector.list_versions(event)
+
+    def _list_resources(self, event):
+        resources = event.params.get("resources", "")
+        return self.collector.list_resources(event, resources=resources)
+
+    def _scrub_resources(self, event):
+        resources = event.params.get("resources", "")
+        return self.collector.scrub_resources(event, resources=resources)
+
+    def _sync_resources(self, event):
+        resources = event.params.get("resources", "")
+        try:
+            self.collector.apply_missing_resources(event, resources=resources)
+        except ManifestClientError:
+            msg = "Failed to apply missing resources. API Server unavailable."
+            event.set_results({"result": msg})
+        else:
+            self.stored.deployed = True
+
     def _get_arch(self) -> str:
-        """Return the machine architecture as a string.
+        """Retrieve the machine architecture as a string.
 
         This method uses the `dpkg` command to retrieve the machine architecture
         of the current system. The architecture is returned as a string.
@@ -536,9 +549,7 @@ class CalicoCharm(ops.CharmBase):
         Returns:
             str: The machine architecture as a string.
         """
-        architecture = subprocess.check_output(
-            ["dpkg", "--print-architecture"]
-        ).rstrip()
+        architecture = subprocess.check_output(["dpkg", "--print-architecture"]).rstrip()
         architecture = architecture.decode("utf-8")
         return architecture
 
@@ -580,9 +591,7 @@ class CalicoCharm(ops.CharmBase):
         env = os.environ.copy()
         env.update(self._get_calicoctl_env())
         try:
-            return subprocess.check_output(
-                cmd, env=env, stderr=subprocess.PIPE, timeout=timeout
-            )
+            return subprocess.check_output(cmd, env=env, stderr=subprocess.PIPE, timeout=timeout)
         except (CalledProcessError, TimeoutExpired) as e:
             log.error(e.stderr)
             log.error(e.output)

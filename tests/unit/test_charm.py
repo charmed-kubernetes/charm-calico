@@ -5,20 +5,25 @@
 
 
 import os
+import unittest.mock as mock
 from subprocess import CalledProcessError
 from typing import Optional
-import unittest.mock as mock
 
 import ops
-from ops.manifests import ManifestClientError
-from ops.model import ActiveStatus, BlockedStatus
 import ops.testing
 import pytest
-from yaml import BlockEntryToken, YAMLError
 from charm import CalicoCharm
+from ops.manifests import ManifestClientError
+from ops.model import ActiveStatus, BlockedStatus
 from ops.testing import Harness
+from yaml import YAMLError
 
 ops.testing.SIMULATE_CAN_CONNECT = True
+
+
+class NetworkMock:
+    def __init__(self, version):
+        self.version = version
 
 
 @pytest.mark.parametrize(
@@ -182,26 +187,207 @@ def test_get_mtu(
     "detected",
     [
         pytest.param(True, id="Upgrading from reactive"),
-        pytest.param(False, id="Reactive bits not found"),
+        pytest.param(False, id="Upgrading from ops"),
     ],
 )
-@mock.patch("charm.CalicoCharm.service_running")
-@mock.patch("charm.CalicoCharm.service_stop")
-@mock.patch("charm.os.path.isfile")
-@mock.patch("charm.os.remove")
+@mock.patch("charm.service_running")
+@mock.patch("charm.service_stop")
+@mock.patch("charm.daemon_reload")
+@mock.patch("os.path.isfile")
+@mock.patch("os.remove")
 def test_remove_calico_reactive(
-    mock_running: mock.MagicMock,
-    mock_stop: mock.MagicMock,
-    mock_isfile: mock.MagicMock,
     mock_remove: mock.MagicMock,
+    mock_isfile: mock.MagicMock,
+    mock_reload: mock.MagicMock,
+    mock_stop: mock.MagicMock,
+    mock_running: mock.MagicMock,
     charm: CalicoCharm,
+    caplog,
     detected: bool,
 ):
     service_path = os.path.join(os.sep, "lib", "systemd", "system", "calico-node.service")
-    mock_running.return_value = detected
-    mock_stop.return_value = detected
-    mock_isfile.return_value = detected
+    cni_bin_path = "/opt/cni/bin/"
+    mocks = (mock_running, mock_stop, mock_reload, mock_isfile)
+
+    for mock_obj in mocks:
+        mock_obj.return_value = detected
 
     charm._remove_calico_reactive()
+
     mock_running.assert_called_once_with("calico-node")
-    mock_stop.assert_called_once_with("calico-node")
+    mock_isfile.assert_has_calls(
+        [
+            mock.call(service_path),
+            mock.call(cni_bin_path + "calico"),
+            mock.call(cni_bin_path + "calico-ipam"),
+        ]
+    )
+
+    if detected:
+        mock_stop.assert_called_once_with("calico-node")
+
+        mock_remove.assert_has_calls(
+            [
+                mock.call(service_path),
+                mock.call(cni_bin_path + "calico"),
+                mock.call(cni_bin_path + "calico-ipam"),
+            ]
+        )
+
+        assert "calico-node service stopped." in caplog.text
+        assert "calico-node service removed and daemon reloaded." in caplog.text
+        assert "calico binary uninstalled." in caplog.text
+        assert "calico-ipam binary uninstalled." in caplog.text
+    else:
+        assert "calico-node service successfully stopped." in caplog.text
+        assert "calico-node service successfully uninstalled." in caplog.text
+        assert "calico binary successfully uninstalled." in caplog.text
+        assert "calico-ipam binary successfully uninstalled." in caplog.text
+
+
+@mock.patch("charm.CalicoCharm._get_networks")
+def test_get_ip_versions(mock_get_networks: mock.MagicMock, harness: Harness, charm: CalicoCharm):
+    mock_networks = [NetworkMock(version) for version in [4, 6, 4, 6, 4]]
+    mock_get_networks.return_value = mock_networks
+
+    result = charm._get_ip_versions()
+
+    assert result == {4, 6}
+
+
+@mock.patch("charm.CalicoCharm._calicoctl_apply")
+@mock.patch("charm.CalicoCharm._calicoctl_get")
+def test_configure_bgp_globals(
+    mock_get: mock.MagicMock, mock_apply: mock.MagicMock, harness: Harness, charm: CalicoCharm
+):
+    harness.update_config(
+        {
+            "global-as-number": 64511,
+            "bgp-service-cluster-ips": "10.0.0.0/16",
+            "bgp-service-external-ips": "192.168.0.0/16",
+            "bgp-service-loadbalancer-ips": "172.16.0.0/16",
+        }
+    )
+    mock_get.return_value = {
+        "apiVersion": "projectcalico.org/v3",
+        "kind": "BGPConfiguration",
+        "metadata": {"name": "default"},
+        "spec": {},
+    }
+
+    charm._configure_bgp_globals()
+    mock_get.assert_called_once_with("bgpconfig", "default")
+    mock_apply.assert_called_once()
+
+    apply_args, _ = mock_apply.call_args
+    applied_config = apply_args[0]
+
+    assert applied_config["spec"]["asNumber"] == 64511
+    assert applied_config["spec"]["serviceClusterIPs"] == [{"cidr": "10.0.0.0/16"}]
+    assert applied_config["spec"]["serviceExternalIPs"] == [{"cidr": "192.168.0.0/16"}]
+    assert applied_config["spec"]["serviceLoadBalancerIPs"] == [{"cidr": "172.16.0.0/16"}]
+
+
+@mock.patch("charm.CalicoCharm._calicoctl_get")
+def test_configure_bgp_globals_get_raises(mock_get: mock.MagicMock, charm: CalicoCharm, caplog):
+    mock_get.side_effect = CalledProcessError(1, "foo", b"some output", b"some error")
+
+    with pytest.raises(CalledProcessError):
+        charm._configure_bgp_globals()
+        assert "Failed to get BGPConfiguration" in caplog.text
+
+
+@mock.patch("charm.CalicoCharm._calicoctl_apply")
+@mock.patch("charm.CalicoCharm._calicoctl_get")
+def test_configure_bgp_globals_apply_raises(
+    mock_get: mock.MagicMock,
+    mock_apply: mock.MagicMock,
+    harness: Harness,
+    charm: CalicoCharm,
+    caplog,
+):
+    harness.update_config(
+        {
+            "global-as-number": 64511,
+            "bgp-service-cluster-ips": "10.0.0.0/16",
+            "bgp-service-external-ips": "192.168.0.0/16",
+            "bgp-service-loadbalancer-ips": "172.16.0.0/16",
+        }
+    )
+    mock_get.side_effect = CalledProcessError(1, "foo", b"some output", b"resource does not exist")
+    mock_apply.side_effect = CalledProcessError(1, "foo")
+
+    with pytest.raises(CalledProcessError):
+        charm._configure_bgp_globals()
+
+
+@mock.patch("charm.CalicoCharm._calicoctl_apply")
+@mock.patch("charm.CalicoCharm._calicoctl_get")
+def test_configure_bgp_globals_resource(
+    mock_get: mock.MagicMock,
+    mock_apply: mock.MagicMock,
+    harness: Harness,
+    charm: CalicoCharm,
+    caplog,
+):
+    harness.update_config(
+        {
+            "global-as-number": 64511,
+            "bgp-service-cluster-ips": "10.0.0.0/16",
+            "bgp-service-external-ips": "192.168.0.0/16",
+            "bgp-service-loadbalancer-ips": "172.16.0.0/16",
+        }
+    )
+    mock_get.side_effect = CalledProcessError(1, "foo", b"some output", b"resource does not exist")
+
+    charm._configure_bgp_globals()
+    mock_get.assert_called_once_with("bgpconfig", "default")
+    mock_apply.assert_called_once()
+
+    assert "default BGPConfiguration does not exist." in caplog.text
+
+
+@mock.patch("charm.gethostname")
+@mock.patch("charm.CalicoCharm._get_unit_as_number")
+@mock.patch("charm.CalicoCharm._get_route_reflector_cluster_id")
+@mock.patch("charm.CalicoCharm._calicoctl_apply")
+@mock.patch("charm.CalicoCharm._calicoctl_get")
+def test_configure_node(
+    mock_get: mock.MagicMock,
+    mock_apply: mock.MagicMock,
+    mock_cluster_id: mock.MagicMock,
+    mock_unit: mock.MagicMock,
+    mock_hostname: mock.MagicMock,
+    charm: CalicoCharm,
+):
+    mock_hostname.return_value = "test-node"
+    mock_unit.return_value = 64511
+    mock_cluster_id.return_value = "224.0.0.1"
+    mock_get.return_value = {
+        "apiVersion": "projectcalico.org/v3",
+        "kind": "BGPConfiguration",
+        "metadata": {"name": "default"},
+        "spec": {"bgp": {}},
+    }
+
+    charm._configure_node()
+
+    mock_get.assert_called_once_with("node", "test-node")
+    mock_apply.assert_called_once()
+
+    apply_args, _ = mock_apply.call_args
+    applied_config = apply_args[0]
+    assert applied_config["spec"]["bgp"]["asNumber"] == 64511
+    assert applied_config["spec"]["bgp"]["routeReflectorClusterID"] == "224.0.0.1"
+
+
+@mock.patch("charm.CalicoCharm._get_unit_as_number")
+@mock.patch("charm.CalicoCharm._calicoctl_get")
+def test_configure_node_raises(
+    mock_get: mock.MagicMock, mock_unit: mock.MagicMock, charm: CalicoCharm
+):
+    mock_get.side_effect = CalledProcessError(1, "foo", b"some output", b"some error")
+    mock_unit.return_value = 64511
+
+    with pytest.raises(CalledProcessError):
+        charm._configure_node()

@@ -1,20 +1,39 @@
-name: Charmed Kubernetes VSphere Integration Tests
-on: [pull_request]
+name: Calico Test Suite
+on:
+  push:
+    branches:
+      - main
+  pull_request:
 
 jobs:
+  call-inclusive-naming-check:
+    name: Inclusive Naming
+    uses: canonical-web-and-design/Inclusive-naming/.github/workflows/woke.yaml@main
+    with:
+      fail-on-error: "true"
+
+
+  lint-unit:
+    name: Lint Unit
+    uses: charmed-kubernetes/workflows/.github/workflows/lint-unit.yaml@main
+    with:
+      python: "['3.8', '3.9', '3.10', '3.11']"
+    needs: 
+      - call-inclusive-naming-check
+
   integration-test:
     name: VSphere Integration Test
+    needs: 
+      - lint-unit
     runs-on: self-hosted
-    timeout-minutes: 120
+    timeout-minutes: 90
     steps:
       - name: Check out code
         uses: actions/checkout@v3
-
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.10"
-
+          python-version: 3.8
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
         with:
@@ -23,22 +42,22 @@ jobs:
           credentials-yaml: ${{ secrets.CREDENTIALS_YAML }}
           clouds-yaml: ${{ secrets.CLOUDS_YAML }}
           bootstrap-constraints: "arch=amd64 cores=2 mem=4G"
-          bootstrap-options: "${{ secrets.JAMMY_BOOTSTRAP_OPTIONS }} --model-default datastore=vsanDatastore --model-default primary-network=VLAN_2763"
-
+          bootstrap-options: >-
+            ${{ secrets.JAMMY_BOOTSTRAP_OPTIONS }}
+            --model-default datastore=vsanDatastore
+            --model-default primary-network=VLAN_2763
+            --model-default force-vm-hardware-version=17
       - name: Run test
         run: tox -e integration -- --basetemp=/home/ubuntu/pytest
-
       - name: Setup Debug Artifact Collection
         if: ${{ failure() }}
         run: mkdir tmp
-
       - name: Collect Juju Status
         if: ${{ failure() }}
         run: |
           juju status 2>&1 | tee tmp/juju-status.txt
           juju-crashdump -s -m controller -a debug-layer -a config -o tmp/
           mv juju-crashdump-* tmp/ | true
-
       - name: Upload debug artifacts
         if: ${{ failure() }}
         uses: actions/upload-artifact@v3
