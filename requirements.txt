@@ -1,0 +1,4 @@
+ops >= 2.2.0
+lightkube
+ops.manifest >= 1.1.0
+pydantic

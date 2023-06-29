@@ -1,4 +1,0 @@
-#!/bin/sh
-set -eu
-. /opt/calicoctl/calicoctl.env
-exec /opt/calicoctl/calicoctl "$@"
