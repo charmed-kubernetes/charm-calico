@@ -318,7 +318,7 @@ class CalicoCharm(ops.CharmBase):
         subnet_bgp_peers = yaml.safe_load(self.config["subnet-bgp-peers"])
         subnets = self._filter_local_subnets(subnet_bgp_peers)
         for subnet in subnets:
-            peers += subnet_bgp_peers[str(subnet)]
+            peers += subnet_bgp_peers.get(str(subnet), [])
 
         unit_id = self._get_unit_id()
         unit_bgp_peers = yaml.safe_load(self.config["unit-bgp-peers"])
@@ -327,7 +327,7 @@ class CalicoCharm(ops.CharmBase):
 
         safe_unit_name = self.unit.name.replace("/", "-")
         named_peers = {
-            f"{safe_unit_name}-{peer['address'].replace(':', '-')}-{peer['as_number']}": peer
+            f"{safe_unit_name}-{peer['address'].replace(':', '-')}-{peer['as-number']}": peer
             for peer in peers
         }
 
@@ -348,25 +348,17 @@ class CalicoCharm(ops.CharmBase):
                 }
                 self._calicoctl_apply(peer_def)
 
-                log.info("Removing unrecognized peers.")
-                existing_peers = self._calicoctl_get("bgppeers")["items"]
-                existing_peers = [peer["metadata"]["name"] for peer in existing_peers]
-                peers_to_delete = [
-                    peer
-                    for peer in existing_peers
-                    if peer.startswith(safe_unit_name + "-") and peer not in named_peers
-                ]
-                existing_peers = {
-                    peer["metadata"]["name"] for peer in self._calicoctl_get("bgppeers")["items"]
-                }
-                peers_to_delete = [
-                    peer
-                    for peer in existing_peers
-                    if peer.startswith(f"{safe_unit_name}-") and peer not in named_peers
-                ]
+            log.info("Removing unrecognized peers.")
+            existing_peers = self._calicoctl_get("bgppeers")["items"]
+            existing_peers = [peer["metadata"]["name"] for peer in existing_peers]
+            peers_to_delete = [
+                peer
+                for peer in existing_peers
+                if peer.startswith(safe_unit_name + "-") and peer not in named_peers
+            ]
 
-                for peer in peers_to_delete:
-                    self.calicoctl("delete", "bgppeer", peer)
+            for peer in peers_to_delete:
+                self.calicoctl("delete", "bgppeer", peer)
         except (CalledProcessError, TimeoutExpired) as e:
             log.exception("Failed to apply BGP peer configuration.")
             raise e
@@ -471,24 +463,19 @@ class CalicoCharm(ops.CharmBase):
 
         with tempfile.TemporaryDirectory() as tmp:
             self._unpack_archive(resource_path, tmp)
-            apps = [
-                {"name": "calicoctl", "path": CALICO_CTL_PATH},
-                {"name": "calico", "path": CNI_BIN_PATH},
-                {"name": "calico-ipam", "path": CNI_BIN_PATH},
-            ]
-            for app in apps:
-                origin = os.path.join(tmp, app["name"])
-                dst = os.path.join(app["path"], app["name"])
-                install_cmd = ["install", "-v", "-D", origin, dst]
-                try:
-                    check_call(install_cmd)
-                except CalledProcessError as e:
-                    log.exception(f"Error installing {app['name']}: {e}")
-                    self.unit.status = BlockedStatus(f"Error installing {app['name']}")
-                    return
+            origin = os.path.join(tmp, "calicoctl")
+            dst = os.path.join(CALICO_CTL_PATH, "calicoctl")
+            install_cmd = ["install", "-v", "-D", origin, dst]
+            try:
+                check_call(install_cmd)
+            except CalledProcessError:
+                msg = "Failed to install calicoctl"
+                log.exception(msg)
+                self.unit.status = BlockedStatus(msg)
+                return
 
             calicoctl_path = "/usr/local/bin/calicoctl"
-            shutil.copy(Path("./templates/calicoctl"), calicoctl_path)
+            shutil.copy(Path("./scripts/calicoctl"), calicoctl_path)
             os.chmod(calicoctl_path, 0o755)
 
         self.stored.binaries_installed = True

@@ -424,13 +424,11 @@ def test_get_unit_as_number_subnet(
     assert result == 64515
 
 
-@mock.patch("charm.CalicoCharm._filter_local_subnets")
-@mock.patch("charm.CalicoCharm._get_unit_id")
+@mock.patch("charm.CalicoCharm._filter_local_subnets", return_value=[ip_network("10.0.0.0/24")])
+@mock.patch("charm.CalicoCharm._get_unit_id", return_value=0)
 def test_get_unit_as_number_no_as_subnet(
     mock_unit: mock.MagicMock, mock_filter: mock.MagicMock, harness: Harness, charm: CalicoCharm
 ):
-    mock_unit.return_value = 0
-    mock_filter.return_value = [ip_network("10.0.0.0/24")]
     result = charm._get_unit_as_number()
 
     assert result is None
@@ -449,7 +447,7 @@ def test_get_unit_as_number_none(
 
 
 @mock.patch("charm.CalicoCharm._get_bind_address")
-def test_filter_local_subnets(mock_bind: mock.MagicMock, charm: CalicoCharm ):
+def test_filter_local_subnets(mock_bind: mock.MagicMock, charm: CalicoCharm):
     mock_bind.return_value = "192.168.1.3"
 
     subnets = ["192.168.1.0/24", "10.0.0.0/16"]
@@ -457,3 +455,60 @@ def test_filter_local_subnets(mock_bind: mock.MagicMock, charm: CalicoCharm ):
     expected = [ip_network("192.168.1.0/24")]
 
     assert result == expected
+
+
+@mock.patch("charm.gethostname", return_value="test-node")
+@mock.patch("charm.CalicoCharm.calicoctl")
+@mock.patch("charm.CalicoCharm._calicoctl_apply")
+@mock.patch("charm.CalicoCharm._calicoctl_get")
+@mock.patch("charm.CalicoCharm._filter_local_subnets", return_value=[ip_network("10.0.0.0/24")])
+@mock.patch("charm.CalicoCharm._get_unit_id", return_value=0)
+def test_configure_bgp_peers_unit_peers(
+    mock_unit: mock.MagicMock,
+    mock_filter: mock.MagicMock,
+    mock_get: mock.MagicMock,
+    mock_apply: mock.MagicMock,
+    mock_calicoctl: mock.MagicMock,
+    mock_hostname: mock.MagicMock,
+    harness: Harness,
+    charm: CalicoCharm,
+):
+    harness.update_config(
+        {
+            "unit-bgp-peers": "{0: [{address: 10.0.0.1, as-number: 65000}, {address: 10.0.0.2, as-number: 65001}], 1: [{address: 10.0.1.1, as-number: 65002}]}"
+        }
+    )
+    rogue_def = {
+        "items": [
+            {
+                "apiVersion": "projectcalico.org/v3",
+                "kind": "BGPPeer",
+                "metadata": {"name": "calico-0-10.20.0.1-65000"},
+                "spec": {"node": "test-node", "peerIP": "10.0.0.1", "asNumber": 65000},
+            }
+        ]
+    }
+    mock_get.return_value = rogue_def
+
+    charm._configure_bgp_peers()
+    mock_calicoctl.assert_called_once_with("delete", "bgppeer", "calico-0-10.20.0.1-65000")
+    mock_apply.assert_has_calls(
+        [
+            mock.call(
+                {
+                    "apiVersion": "projectcalico.org/v3",
+                    "kind": "BGPPeer",
+                    "metadata": {"name": "calico-0-10.0.0.1-65000"},
+                    "spec": {"node": "test-node", "peerIP": "10.0.0.1", "asNumber": 65000},
+                }
+            ),
+            mock.call(
+                {
+                    "apiVersion": "projectcalico.org/v3",
+                    "kind": "BGPPeer",
+                    "metadata": {"name": "calico-0-10.0.0.2-65001"},
+                    "spec": {"node": "test-node", "peerIP": "10.0.0.2", "asNumber": 65001},
+                }
+            ),
+        ]
+    )
