@@ -291,7 +291,7 @@ class CalicoCharm(ops.CharmBase):
         if subnets:
             subnets.sort(key=lambda subnet: -subnet.prefixlen)
             subnet = subnets[0]
-            as_number = subnet_as_numbers[str(subnet)]
+            as_number = subnet_as_numbers.get(str(subnet))
             return as_number
 
         return None

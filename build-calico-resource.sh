@@ -2,7 +2,7 @@
 set -eux
 
 # This script will fetch binaries and create resource tarballs for use by
-# charm-[push|release]. The arm64 binaries are not available upsteram for
+# charm-[push|release]. The arm64 binaries are not available upstream for
 # v2.6, so we must build them and host them somewhere ourselves. The steps
 # for doing that are documented here:
 #

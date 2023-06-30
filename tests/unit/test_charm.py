@@ -6,6 +6,7 @@
 
 import os
 import unittest.mock as mock
+from ipaddress import ip_network
 from subprocess import CalledProcessError
 from typing import Optional
 
@@ -391,3 +392,57 @@ def test_configure_node_raises(
 
     with pytest.raises(CalledProcessError):
         charm._configure_node()
+
+
+@mock.patch("charm.CalicoCharm._filter_local_subnets")
+@mock.patch("charm.CalicoCharm._get_unit_id")
+def test_get_unit_as_number_unit(
+    mock_unit: mock.MagicMock, mock_filter: mock.MagicMock, harness: Harness, charm: CalicoCharm
+):
+    mock_unit.return_value = 0
+    harness.update_config({"unit-as-numbers": "{0: 64512, 1: 64513}"})
+    result = charm._get_unit_as_number()
+
+    assert result == 64512
+
+
+@mock.patch("charm.CalicoCharm._filter_local_subnets")
+@mock.patch("charm.CalicoCharm._get_unit_id")
+def test_get_unit_as_number_subnet(
+    mock_unit: mock.MagicMock, mock_filter: mock.MagicMock, harness: Harness, charm: CalicoCharm
+):
+    mock_unit.return_value = 0
+    harness.update_config(
+        {
+            "unit-as-numbers": "{1: 64512, 2: 64513}",
+            "subnet-as-numbers": "{10.0.0.0/24: 64515, 10.0.1.0/24: 64513}",
+        }
+    )
+    mock_filter.return_value = [ip_network("10.0.0.0/24")]
+    result = charm._get_unit_as_number()
+
+    assert result == 64515
+
+
+@mock.patch("charm.CalicoCharm._filter_local_subnets")
+@mock.patch("charm.CalicoCharm._get_unit_id")
+def test_get_unit_as_number_no_as_subnet(
+    mock_unit: mock.MagicMock, mock_filter: mock.MagicMock, harness: Harness, charm: CalicoCharm
+):
+    mock_unit.return_value = 0
+    mock_filter.return_value = [ip_network("10.0.0.0/24")]
+    result = charm._get_unit_as_number()
+
+    assert result is None
+
+
+@mock.patch("charm.CalicoCharm._filter_local_subnets")
+@mock.patch("charm.CalicoCharm._get_unit_id")
+def test_get_unit_as_number_none(
+    mock_unit: mock.MagicMock, mock_filter: mock.MagicMock, harness: Harness, charm: CalicoCharm
+):
+    mock_unit.return_value = 0
+    mock_filter.return_value = []
+    result = charm._get_unit_as_number()
+
+    assert result is None
