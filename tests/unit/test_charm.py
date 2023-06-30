@@ -446,3 +446,14 @@ def test_get_unit_as_number_none(
     result = charm._get_unit_as_number()
 
     assert result is None
+
+
+@mock.patch("charm.CalicoCharm._get_bind_address")
+def test_filter_local_subnets(mock_bind: mock.MagicMock, charm: CalicoCharm ):
+    mock_bind.return_value = "192.168.1.3"
+
+    subnets = ["192.168.1.0/24", "10.0.0.0/16"]
+    result = charm._filter_local_subnets(subnets)
+    expected = [ip_network("192.168.1.0/24")]
+
+    assert result == expected

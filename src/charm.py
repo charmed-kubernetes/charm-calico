@@ -297,19 +297,13 @@ class CalicoCharm(ops.CharmBase):
         return None
 
     def _filter_local_subnets(self, subnets):
-        ip_addr = ipaddress.ip_address(self._get_bind_address())
-        subnets = [ipaddress.ip_network(subnet) for subnet in subnets]
-        subnets = [subnet for subnet in subnets if ip_addr in subnet]
-        return subnets
-
-    def _filter_local_subnets(self, subnets):
         bind_address = ipaddress.ip_address(self._get_bind_address())
-        filtered_subnets = (
+        filtered_subnets = [
             ipaddress.ip_network(subnet)
             for subnet in subnets
             if bind_address in ipaddress.ip_network(subnet)
-        )
-        return list(filtered_subnets)
+        ]
+        return filtered_subnets
 
     def _get_bind_address(self):
         bind_address = self.model.get_binding("cni").network.bind_address
