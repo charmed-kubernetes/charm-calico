@@ -24,7 +24,6 @@ def k8s_core_bundle(ops_test):
 
 
 @pytest.fixture(scope="module")
-@pytest.mark.asyncio
 async def k8s_core_yaml(ops_test, k8s_core_bundle):
     """Download and render the kubernetes-core bundle, return it's full yaml."""
     (bundle_path,) = await ops_test.async_render_bundles(k8s_core_bundle)
@@ -38,7 +37,6 @@ def series(k8s_core_yaml, request):
 
 
 @pytest.fixture(scope="module")
-@pytest.mark.asyncio
 async def kubernetes(ops_test):
     k_c_p = ops_test.model.applications["kubernetes-control-plane"]
     (leader,) = [u for u in k_c_p.units if (await u.is_leader_from_status())]
