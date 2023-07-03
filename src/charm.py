@@ -493,6 +493,10 @@ class CalicoCharm(ops.CharmBase):
         env["ETCD_KEY_FILE"] = ETCD_KEY_PATH
         env["ETCD_CERT_FILE"] = ETCD_CERT_PATH
         env["ETCD_CA_CERT_FILE"] = ETCD_CA_PATH
+        creds = self.etcd.get_client_credentials()
+        Path(ETCD_KEY_PATH).write_text(creds["client_key"])
+        Path(ETCD_CERT_PATH).write_text(creds["client_cert"])
+        Path(ETCD_CA_PATH).write_text(creds["client_ca"])
         return env
 
     def _unpack_archive(self, path: Path, destination: Path):
