@@ -5,6 +5,7 @@ parts:
     charm-python-packages: [setuptools]
     prime:
       - upstream/**
+      - scripts/**
 bases:
   - build-on:
     - name: ubuntu
