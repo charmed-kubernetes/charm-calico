@@ -54,6 +54,7 @@ import json
 import logging
 import os
 from functools import cached_property
+from typing import Optional
 
 from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredState
 from ops.model import Relation
@@ -187,7 +188,7 @@ class EtcdReactiveRequires(Object):
         }
 
     @cached_property
-    def relation(self) -> Relation | None:
+    def relation(self) -> Optional[Relation]:
         """Return the relation object for this interface."""
         return self.model.get_relation(self.endpoint)
 
