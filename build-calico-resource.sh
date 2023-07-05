@@ -64,5 +64,3 @@ for arch in ${arches}; do
 done
 
 rm -rf release-$calico_version.tgz release-$calico_version
-
-touch calico-node-image.tar.gz

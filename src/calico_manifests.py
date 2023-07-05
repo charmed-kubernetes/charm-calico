@@ -13,36 +13,6 @@ from ops.manifests import ConfigRegistry, Manifests, Patch
 log = logging.getLogger(__name__)
 
 
-class PatchEncapsulation(Patch):
-    """A Patch class for setting encapsulation in Calico."""
-
-    def __call__(self, obj) -> None:
-        """Modify the calico-node encapsulation mode."""
-        if not (obj.kind == "DaemonSet" and obj.metadata.name == "calico-node"):
-            return
-
-        log.info("Patching calico-node DaemonSet encapsulation.")
-
-        containers: List[Container] = obj.spec.template.spec.containers
-        vars = {
-            "CALICO_IPV4POOL_VXLAN": {"value": self.manifests.config.get("vxlan"), "found": False},
-            "CALICO_IPV4POOL_IPIP": {"value": self.manifests.config.get("ipip"), "found": False},
-        }
-
-        for container in containers:
-            if container.name == "calico-node":
-                env = container.env
-
-                for v in vars:
-                    for e in env:
-                        if e.name == v:
-                            vars[v]["found"] = True
-                            e.value = vars[v]["value"]
-                for v in vars:
-                    if not vars[v]["found"]:
-                        env.append(EnvVar(v, vars[v]["value"]))
-
-
 class PatchEtcdPaths(Patch):
     """A Patch class for setting the Etcd Paths in Calico."""
 
@@ -314,7 +284,6 @@ class SetEtcdSecrets(Patch):
 
 
 class CalicoManifests(Manifests):
-    # TODO: Hash and put into the annotations to reload both node and controller
     """A class representing Calico manifests.
 
     This class extends the Manifests class and provides functionality specific to Calico manifests.
@@ -356,7 +325,6 @@ class CalicoManifests(Manifests):
             PatchValuesKubeControllers(self),
             PatchIPAutodetectionMethod(self),
             PatchEtcdPaths(self),
-            PatchEncapsulation(self),
         ]
 
         super().__init__("calico", charm.model, "upstream/calico", manipulations)
