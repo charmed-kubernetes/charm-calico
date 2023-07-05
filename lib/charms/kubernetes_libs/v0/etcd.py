@@ -128,8 +128,6 @@ class EtcdReactiveRequires(Object):
 
     def _check_relation(self, _: EventBase):
         """Check if the relation is available and emit the appropriate event."""
-        # TODO: Fix in case the values changed, so emit an event to reconfigure.
-        # etcd is connected only if the charm joins or change the relation
         if self.relation:
             self.state.connected = True
             self.on.connected.emit()

@@ -30,7 +30,3 @@ resources:
     type: file
     filename: calico.tar.gz
     description: 'Calico resource tarball for arm64'
-  calico-node-image:
-    type: file
-    filename: calico-node-image.tar.gz
-    description: 'calico-node container image'

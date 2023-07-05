@@ -4,18 +4,21 @@
 # Learn more about testing at: https://juju.is/docs/sdk/testing
 
 
+import ipaddress
 import os
 import unittest.mock as mock
+from asyncio import subprocess
 from ipaddress import ip_network
+from pathlib import Path
 from subprocess import CalledProcessError
-from typing import Optional
+from typing import Optional, Set
 
 import ops
 import ops.testing
 import pytest
 from charm import CalicoCharm
 from ops.manifests import ManifestClientError
-from ops.model import ActiveStatus, BlockedStatus
+from ops.model import ActiveStatus, BlockedStatus, ModelError, WaitingStatus
 from ops.testing import Harness
 from yaml import YAMLError
 
@@ -69,22 +72,23 @@ def test_on_config_changed(
     deployed: bool,
     side_effect: Exception,
 ):
-    harness.disable_hooks()
-    charm.stored.deployed = deployed
-    mock_event = mock.MagicMock()
-    mock_configure.side_effect = side_effect
-    charm._on_config_changed(mock_event)
-    if deployed:
-        if side_effect:
-            if isinstance(side_effect, CalledProcessError):
-                mock_event.defer.assert_called_once()
-            if isinstance(side_effect, YAMLError):
-                assert charm.unit.status == BlockedStatus(
-                    "Invalid Config provided. Please check juju debug-log for more info."
-                )
-        mock_configure.assert_called_once()
-    else:
-        mock_configure.assert_not_called()
+    with mock.patch.object(charm.calico_manifests, "apply_manifests"):
+        harness.disable_hooks()
+        charm.stored.deployed = deployed
+        mock_event = mock.MagicMock()
+        mock_configure.side_effect = side_effect
+        charm._on_config_changed(mock_event)
+        if deployed:
+            if side_effect:
+                if isinstance(side_effect, CalledProcessError):
+                    mock_event.defer.assert_called_once()
+                if isinstance(side_effect, YAMLError):
+                    assert charm.unit.status == BlockedStatus(
+                        "Invalid Config provided. Please check juju debug-log for more info."
+                    )
+            mock_configure.assert_called_once()
+        else:
+            mock_configure.assert_not_called()
 
 
 @mock.patch("charm.CalicoCharm._configure_calico_pool")
@@ -116,6 +120,117 @@ def test_configure_calico_exception_handling(mock_configure: mock.MagicMock, cha
     with pytest.raises(YAMLError):
         charm._configure_calico()
     assert not charm.stored.calico_configured
+
+
+@mock.patch("charm.CalicoCharm._set_status")
+@mock.patch("charm.CalicoCharm._configure_calico")
+@mock.patch("charm.CalicoCharm._configure_cni")
+@mock.patch("charm.CalicoCharm._get_kubeconfig_status", return_value=True)
+def test_install_or_upgrade(
+    mock_kubeconfig: mock.MagicMock,
+    mock_cni: mock.MagicMock,
+    mock_configure: mock.MagicMock,
+    mock_set_status: mock.MagicMock,
+    charm: CalicoCharm,
+):
+    with mock.patch.object(charm, "etcd") as mock_etcd, mock.patch.object(
+        charm.calico_manifests, "apply_manifests"
+    ) as mock_apply:
+        mock_etcd.return_value.is_ready.return_value = True
+        mock_event = mock.MagicMock()
+        charm._install_or_upgrade(mock_event)
+        mock_cni.assert_called_once()
+        mock_configure.assert_called_once()
+        mock_set_status.assert_called_once()
+        mock_apply.assert_called_once()
+        assert charm.stored.deployed
+
+
+@mock.patch("charm.CalicoCharm._set_status")
+@mock.patch("charm.CalicoCharm._configure_calico")
+@mock.patch("charm.CalicoCharm._configure_cni")
+@mock.patch("charm.CalicoCharm._get_kubeconfig_status", return_value=True)
+def test_install_or_upgrade_etcd_unavailable(
+    mock_kubeconfig: mock.MagicMock,
+    mock_cni: mock.MagicMock,
+    mock_configure: mock.MagicMock,
+    mock_set_status: mock.MagicMock,
+    charm: CalicoCharm,
+):
+    with mock.patch.object(charm, "etcd") as mock_etcd, mock.patch.object(
+        charm.calico_manifests, "apply_manifests"
+    ):
+        mock_etcd.is_ready = False
+        mock_event = mock.MagicMock()
+        charm._install_or_upgrade(mock_event)
+        assert charm.unit.status == BlockedStatus("Waiting for etcd.")
+        mock_event.defer.assert_called_once()
+        assert not charm.stored.deployed
+
+
+@mock.patch("charm.CalicoCharm._set_status")
+@mock.patch("charm.CalicoCharm._configure_calico")
+@mock.patch("charm.CalicoCharm._configure_cni")
+@mock.patch("charm.CalicoCharm._get_kubeconfig_status", return_value=True)
+def test_install_or_upgrade_config(
+    mock_kubeconfig: mock.MagicMock,
+    mock_cni: mock.MagicMock,
+    mock_configure: mock.MagicMock,
+    mock_set_status: mock.MagicMock,
+    charm: CalicoCharm,
+):
+    with mock.patch.object(charm, "etcd") as mock_etcd, mock.patch.object(
+        charm.calico_manifests, "apply_manifests"
+    ):
+        mock_etcd.return_value.is_ready.return_value = True
+        mock_event = mock.MagicMock()
+        mock_configure.side_effect = YAMLError("foo")
+        charm._install_or_upgrade(mock_event)
+        assert charm.unit.status == BlockedStatus(
+            "Invalid Config provided. Please check juju debug-log for more info."
+        )
+        mock_event.defer.assert_not_called()
+        assert not charm.stored.deployed
+
+
+@pytest.mark.parametrize(
+    "side_effect,status",
+    [
+        pytest.param(
+            ManifestClientError("foo"),
+            WaitingStatus("Installing Calico manifests"),
+            id="ManifestClientError",
+        ),
+        pytest.param(
+            CalledProcessError(1, "foo"),
+            WaitingStatus("Configuring Calico"),
+            id="CalledProcessError",
+        ),
+    ],
+)
+@mock.patch("charm.CalicoCharm._set_status")
+@mock.patch("charm.CalicoCharm._configure_calico")
+@mock.patch("charm.CalicoCharm._configure_cni")
+@mock.patch("charm.CalicoCharm._get_kubeconfig_status", return_value=True)
+def test_install_or_upgrade_exception(
+    mock_kubeconfig: mock.MagicMock,
+    mock_cni: mock.MagicMock,
+    mock_configure: mock.MagicMock,
+    mock_set_status: mock.MagicMock,
+    charm: CalicoCharm,
+    side_effect: Exception,
+    status,
+):
+    with mock.patch.object(charm, "etcd") as mock_etcd, mock.patch.object(
+        charm.calico_manifests, "apply_manifests"
+    ):
+        mock_etcd.return_value.is_ready.return_value = True
+        mock_event = mock.MagicMock()
+        mock_configure.side_effect = side_effect
+        charm._install_or_upgrade(mock_event)
+        assert charm.unit.status == status
+        mock_event.defer.assert_called_once()
+        assert not charm.stored.deployed
 
 
 @mock.patch("charm.CalicoCharm._install_or_upgrade")
@@ -254,6 +369,15 @@ def test_get_ip_versions(mock_get_networks: mock.MagicMock, harness: Harness, ch
     result = charm._get_ip_versions()
 
     assert result == {4, 6}
+
+
+def test_get_networks(charm: CalicoCharm):
+    cidrs = "192.168.0.0/24,10.0.0.0/16"
+
+    result = charm._get_networks(cidrs)
+    expected_result = [ipaddress.ip_network("192.168.0.0/24"), ipaddress.ip_network("10.0.0.0/16")]
+
+    assert result == expected_result
 
 
 @mock.patch("charm.CalicoCharm._calicoctl_apply")
@@ -512,3 +636,428 @@ def test_configure_bgp_peers_unit_peers(
             ),
         ]
     )
+
+
+@mock.patch("charm.gethostname", return_value="test-node")
+@mock.patch("charm.CalicoCharm.calicoctl")
+@mock.patch("charm.CalicoCharm._calicoctl_apply")
+@mock.patch("charm.CalicoCharm._calicoctl_get")
+@mock.patch("charm.CalicoCharm._filter_local_subnets", return_value=[ip_network("10.0.0.0/24")])
+@mock.patch("charm.CalicoCharm._get_unit_id", return_value=0)
+def test_configure_bgp_peers_raises(
+    mock_unit: mock.MagicMock,
+    mock_filter: mock.MagicMock,
+    mock_get: mock.MagicMock,
+    mock_apply: mock.MagicMock,
+    mock_calicoctl: mock.MagicMock,
+    mock_hostname: mock.MagicMock,
+    harness: Harness,
+    charm: CalicoCharm,
+    caplog,
+):
+    harness.update_config(
+        {
+            "unit-bgp-peers": "{0: [{address: 10.0.0.1, as-number: 65000}, {address: 10.0.0.2, as-number: 65001}], 1: [{address: 10.0.1.1, as-number: 65002}]}"
+        }
+    )
+    mock_apply.side_effect = CalledProcessError(1, "foo", "some output", "some error")
+    with pytest.raises(CalledProcessError):
+        charm._configure_bgp_peers()
+        assert "Failed to apply BGP peer configuration." in caplog.text
+
+
+@pytest.mark.parametrize(
+    "ip_versions,expected_config",
+    [
+        pytest.param(
+            {4, 6},
+            {
+                "kubeconfig_path": "/opt/calicoctl/kubeconfig",
+                "mtu": 1500,
+                "assign_ipv4": "true",
+                "assign_ipv6": "true",
+                "IP6": "autodetect",
+            },
+            id="Dualstack",
+        ),
+        pytest.param(
+            {4},
+            {
+                "kubeconfig_path": "/opt/calicoctl/kubeconfig",
+                "mtu": 1500,
+                "assign_ipv4": "true",
+                "assign_ipv6": "false",
+                "IP6": "none",
+            },
+            id="Dualstack",
+        ),
+    ],
+)
+@mock.patch("charm.CalicoCharm._propagate_cni_config")
+@mock.patch("charm.CalicoCharm._get_ip_versions")
+@mock.patch("charm.CalicoCharm._get_mtu", return_value=1500)
+def test_configure_cni(
+    mock_mtu: mock.MagicMock,
+    mock_get_ip: mock.MagicMock,
+    mock_propagate: mock.MagicMock,
+    charm: CalicoCharm,
+    ip_versions: Set,
+    expected_config: dict,
+):
+    charm.stored.cni_configure = False
+    mock_get_ip.return_value = ip_versions
+
+    charm._configure_cni()
+
+    assert charm.cni_options == expected_config
+    assert charm.stored.cni_configured
+    mock_mtu.assert_called_once()
+    mock_propagate.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "disable,vxlan",
+    [
+        pytest.param(True, "Always", id="Disable VXLAN TX checksumming"),
+        pytest.param(False, "Never", id="Don't disable VXLAN TX checksumming"),
+    ],
+)
+@mock.patch("subprocess.check_call")
+def test_disable_vxlan_tx_checksumming(
+    mock_check_call: mock.MagicMock,
+    harness: Harness,
+    charm: CalicoCharm,
+    disable: bool,
+    vxlan: str,
+):
+    harness.update_config({"disable-vxlan-tx-checksumming": disable, "vxlan": vxlan})
+    charm._disable_vxlan_tx_checksumming()
+    if disable:
+        mock_check_call.assert_called_once_with(
+            ["ethtool", "-K", "vxlan.calico", "tx-checksum-ip-generic", "off"]
+        )
+    else:
+        mock_check_call.assert_not_called()
+
+
+@mock.patch("subprocess.check_call", side_effect=(CalledProcessError(1, "ethtool")))
+def test_disable_vxlan_tx_checksumming_raises(
+    mock_check_call: mock.MagicMock,
+    harness: Harness,
+    charm: CalicoCharm,
+):
+    harness.update_config({"disable-vxlan-tx-checksumming": True, "vxlan": "Always"})
+    with pytest.raises(CalledProcessError):
+        charm._disable_vxlan_tx_checksumming()
+    mock_check_call.assert_called_once_with(
+        ["ethtool", "-K", "vxlan.calico", "tx-checksum-ip-generic", "off"]
+    )
+
+
+def test_propagate_cni_config(harness: Harness, charm: CalicoCharm):
+    harness.disable_hooks()
+    config_dict = {"cidr": "10.0.0.0/24"}
+    harness.update_config(config_dict)
+    rel_id = harness.add_relation("cni", "kubernetes-control-plane")
+    harness.add_relation_unit(rel_id, "kubernetes-control-plane/0")
+
+    charm._propagate_cni_config()
+    assert len(harness.model.relations["cni"]) == 1
+    relation = harness.model.relations["cni"][0]
+    assert relation.data[charm.unit] == {
+        "cidr": "10.0.0.0/24",
+        "cni-conf-file": "10-calico.conflist",
+    }
+
+
+@mock.patch("charm.CalicoCharm._calicoctl_get")
+def test_configure_calico_pool_unmanaged(
+    mock_get: mock.MagicMock, harness: Harness, charm: CalicoCharm, caplog
+):
+    harness.update_config({"manage-pools": False})
+    charm._configure_calico_pool()
+    mock_get.assert_not_called()
+    assert "Skipping pool configuration." in caplog.text
+
+
+@mock.patch("charm.CalicoCharm._calicoctl_apply")
+@mock.patch("charm.CalicoCharm.calicoctl")
+@mock.patch("charm.CalicoCharm._calicoctl_get")
+def test_configure_calico_pool(
+    mock_get: mock.MagicMock,
+    mock_calicoctl: mock.MagicMock,
+    mock_apply: mock.MagicMock,
+    harness: Harness,
+    charm: CalicoCharm,
+    caplog,
+):
+    harness.update_config(
+        {
+            "manage-pools": True,
+            "cidr": "192.0.2.0/24",
+            "ipip": "Always",
+            "vxlan": "Never",
+            "nat-outgoing": True,
+        }
+    )
+
+    mock_get.return_value = {
+        "items": [
+            {
+                "apiVersion": "projectcalico.org/v3",
+                "kind": "IPPool",
+                "metadata": {"name": "intergalactic"},
+                "spec": {
+                    "cidr": "10.0.1.0/24",
+                    "ipipMode": "Always",
+                    "vxlanMode": "Never",
+                    "natOutgoing": True,
+                },
+            },
+        ]
+    }
+    charm._configure_calico_pool()
+    mock_get.assert_called_once_with("pool")
+    mock_calicoctl.assert_called_once_with("delete", "pool", "intergalactic", "--skip-not-exists")
+    mock_apply.assert_called_once_with(
+        {
+            "apiVersion": "projectcalico.org/v3",
+            "kind": "IPPool",
+            "metadata": {"name": "ipv4"},
+            "spec": {
+                "cidr": "192.0.2.0/24",
+                "ipipMode": "Always",
+                "vxlanMode": "Never",
+                "natOutgoing": True,
+            },
+        }
+    )
+
+
+@mock.patch("charm.CalicoCharm._calicoctl_get", side_effect=CalledProcessError(1, "foo"))
+def test_configure_calico_pool_raises(
+    mock_get: mock.MagicMock, harness: Harness, charm: CalicoCharm, caplog
+):
+    harness.update_config({"manage-pools": True})
+    with pytest.raises(CalledProcessError):
+        charm._configure_calico_pool()
+    assert "Failed to modify IP Pools." in caplog.text
+
+
+@pytest.mark.parametrize(
+    "side_effect,expected_status",
+    [
+        pytest.param(ModelError(), BlockedStatus("Error claiming calico"), id="Model Error"),
+        pytest.param(NameError(), BlockedStatus("Resource calico not found"), id="Name Error"),
+    ],
+)
+def test_install_calico_resources_exception(
+    harness: Harness, side_effect: Exception, expected_status
+):
+    harness.disable_hooks()
+    harness.begin()
+    charm = harness.charm
+    with mock.patch.object(charm.model.resources, "fetch") as mock_fetch:
+        mock_fetch.side_effect = side_effect
+
+        charm._install_calico_binaries()
+
+        assert charm.unit.status == expected_status
+
+
+@mock.patch("shutil.copy")
+@mock.patch("subprocess.check_call")
+@mock.patch("charm.CalicoCharm._unpack_archive")
+@mock.patch("os.chmod")
+@mock.patch("os.stat")
+def test_install_calico_resources(
+    mock_stat: mock.MagicMock,
+    mock_chmod: mock.MagicMock,
+    mock_unpack: mock.MagicMock,
+    mock_check: mock.MagicMock,
+    mock_copy: mock.MagicMock,
+    harness: Harness,
+):
+    harness.disable_hooks()
+    harness.begin()
+    charm = harness.charm
+    with mock.patch.object(charm.model.resources, "fetch") as mock_fetch:
+        mock_fetch.return_value = "/path/to/resource"
+        mock_stat.return_value.st_size = 2000000
+
+        charm._install_calico_binaries()
+
+        mock_fetch.assert_called_once_with("calico")
+        mock_stat.assert_called_once_with("/path/to/resource")
+        mock_unpack.assert_called_once()
+        mock_check.assert_called_once()
+        mock_chmod.assert_called_once_with("/usr/local/bin/calicoctl", 0o755)
+        mock_copy.assert_called_once_with(Path("./scripts/calicoctl"), "/usr/local/bin/calicoctl")
+        assert charm.stored.binaries_installed
+
+
+@mock.patch("shutil.copy")
+@mock.patch("subprocess.check_call")
+@mock.patch("charm.CalicoCharm._unpack_archive")
+@mock.patch("os.chmod")
+@mock.patch("os.stat")
+def test_install_calico_resources_raises(
+    mock_stat: mock.MagicMock,
+    mock_chmod: mock.MagicMock,
+    mock_unpack: mock.MagicMock,
+    mock_check: mock.MagicMock,
+    mock_copy: mock.MagicMock,
+    harness: Harness,
+    caplog,
+):
+    harness.disable_hooks()
+    harness.begin()
+    charm = harness.charm
+    with mock.patch.object(charm.model.resources, "fetch") as mock_fetch:
+        mock_fetch.return_value = "/path/to/resource"
+        mock_stat.return_value.st_size = 2000000
+        mock_check.side_effect = CalledProcessError(1, "cmd", "some output", "some error")
+
+        charm._install_calico_binaries()
+        assert charm.unit.status == BlockedStatus("Failed to install calicoctl")
+        assert "Failed to install calicoctl" in caplog.text
+
+
+@mock.patch("os.stat")
+def test_install_calico_resources_filesize(
+    mock_stat: mock.MagicMock,
+    harness: Harness,
+):
+    harness.disable_hooks()
+    harness.begin()
+    charm = harness.charm
+    with mock.patch.object(charm.model.resources, "fetch") as mock_fetch:
+        mock_fetch.return_value = "/path/to/resource"
+        mock_stat.return_value.st_size = 500
+
+        charm._install_calico_binaries()
+        assert charm.unit.status == BlockedStatus("Incomplete resource: calico")
+
+
+@mock.patch("charm.CalicoCharm._get_calicoctl_env")
+@mock.patch("builtins.open")
+def test_update_calicoctl_env(
+    mock_open: mock.MagicMock, mock_get_env: mock.MagicMock, charm: CalicoCharm
+):
+    env = {
+        "ETCD_ENDPOINTS": "/foo/path/endpoints",
+        "ETCD_KEY_FILE": "/foo/path/key",
+        "ETCD_CERT_FILE": "/foo/path/cert",
+        "ETCD_CA_CERT_FILE": "/foo/path/ca",
+    }
+    mock_get_env.return_value = env
+    mock_event = mock.MagicMock()
+    charm._update_calicoctl_env(mock_event)
+
+    mock_open.assert_called_once_with("/opt/calicoctl/calicoctl.env", "w")
+    handle = mock_open().__enter__()
+    handle.write.assert_called_once_with(
+        "export ETCD_CA_CERT_FILE=/foo/path/ca\nexport ETCD_CERT_FILE=/foo/path/cert\nexport ETCD_ENDPOINTS=/foo/path/endpoints\nexport ETCD_KEY_FILE=/foo/path/key"
+    )
+
+
+@mock.patch(
+    "charms.kubernetes_libs.v0.etcd.EtcdReactiveRequires.get_connection_string",
+    return_value="https://10.0.10.24:4343",
+)
+def test_get_calicoctl_env(mock_etcd: mock.PropertyMock, charm: CalicoCharm):
+    expected_env = {
+        "ETCD_ENDPOINTS": "https://10.0.10.24:4343",
+        "ETCD_KEY_FILE": "/opt/calicoctl/etcd-key",
+        "ETCD_CERT_FILE": "/opt/calicoctl/etcd-cert",
+        "ETCD_CA_CERT_FILE": "/opt/calicoctl/etcd-ca",
+    }
+
+    result = charm._get_calicoctl_env()
+    assert expected_env == result
+
+
+@mock.patch("tarfile.open")
+def test_unpack_archive(mock_tarfile_open: mock.MagicMock, charm: CalicoCharm):
+    source_path = "/test/path"
+    dst_path = "/dst/path"
+
+    charm._unpack_archive(source_path, dst_path)
+    mock_tarfile_open.assert_called_once_with(source_path)
+    mock_tarfile_open().extractall.assert_called_once_with(dst_path)
+
+
+@mock.patch("charm.CalicoCharm.calicoctl")
+@mock.patch("tempfile.TemporaryDirectory")
+@mock.patch("builtins.open")
+def test_calicoctl_apply(
+    mock_open: mock.MagicMock,
+    mock_tempdir: mock.MagicMock,
+    mock_calicoctl: mock.MagicMock,
+    charm: CalicoCharm,
+):
+    test_data = {"key": "value"}
+    mock_tempdir.return_value.__enter__.return_value = "/tmp/dir"
+    charm._calicoctl_apply(test_data)
+
+    mock_tempdir.assert_called_once()
+    filename = "/tmp/dir/calicoctl_manifest.yaml"
+    mock_open.assert_called_once_with(filename, "w")
+    mock_calicoctl.assert_called_once_with("apply", "-f", filename)
+
+
+@mock.patch("charm.CalicoCharm.calicoctl")
+def test_calicoctl_get(mock_calicoctl: mock.MagicMock, charm: CalicoCharm):
+    test_args = ("node", "juju-a43756-1")
+    expected_args = ("get", "-o", "yaml", "--export") + test_args
+    expected_dict = {"key": "value"}
+    mock_calicoctl.return_value = "key: value"
+    result = charm._calicoctl_get(*test_args)
+
+    mock_calicoctl.assert_called_once_with(*expected_args)
+    assert result == expected_dict
+
+
+@mock.patch("charm.CalicoCharm.calicoctl")
+def test_calicoctl_get_raises(mock_calicoctl: mock.MagicMock, charm: CalicoCharm, caplog):
+    test_args = ("node", "juju-a43756-1")
+    mock_calicoctl.return_value = 'key: - "value2 : a'
+    with pytest.raises(YAMLError):
+        charm._calicoctl_get(*test_args)
+    assert "Failed to parse calicoctl output as yaml" in caplog.text
+
+
+@mock.patch("subprocess.check_output")
+@mock.patch("charm.CalicoCharm._get_calicoctl_env")
+def test_calicoctl(mock_get: mock.MagicMock, mock_check: mock.MagicMock, charm: CalicoCharm):
+    test_args = ("get", "version")
+    mock_get.return_value = {"ETCD_KEY_FILE": "/tmp/test/path/key"}
+    expected_cmd = ["/opt/calicoctl/calicoctl"] + list(test_args)
+    expected_env = os.environ.copy()
+    expected_env.update({"ETCD_KEY_FILE": "/tmp/test/path/key"})
+
+    charm.calicoctl(*test_args)
+
+    mock_check.assert_called_once_with(
+        expected_cmd, env=expected_env, stderr=subprocess.PIPE, timeout=60
+    )
+
+
+@mock.patch("subprocess.check_output")
+@mock.patch("charm.CalicoCharm._get_calicoctl_env")
+def test_calicoctl_raises(
+    mock_get: mock.MagicMock, mock_check: mock.MagicMock, charm: CalicoCharm
+):
+    test_args = ("get", "version")
+    expected_cmd = ["/opt/calicoctl/calicoctl"] + list(test_args)
+    mock_check.side_effect = CalledProcessError(1, expected_cmd, "some output", "some error")
+
+    with pytest.raises(CalledProcessError):
+        charm.calicoctl(*test_args)
+
+
+@mock.patch("charm.CalicoCharm._set_status")
+def test_on_update_status(mock_set: mock.MagicMock, charm: CalicoCharm):
+    mock_event = mock.MagicMock()
+    charm._on_update_status(mock_event)
+    mock_set.assert_called_once()

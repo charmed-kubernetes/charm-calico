@@ -56,8 +56,6 @@ for arch in ${arches}; do
   mkdir resource-build-$arch
   pushd resource-build-$arch
   cp ../release-$calico_version/bin/calicoctl/calicoctl-linux-$arch calicoctl
-  cp ../release-$calico_version/bin/cni/$arch/calico calico
-  cp ../release-$calico_version/bin/cni/$arch/calico-ipam calico-ipam
 
   tar -zcvf ../calico-$arch.tar.gz .
 

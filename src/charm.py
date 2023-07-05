@@ -12,7 +12,7 @@ import tarfile
 import tempfile
 from pathlib import Path
 from socket import gethostname
-from subprocess import CalledProcessError, TimeoutExpired, check_call
+from subprocess import CalledProcessError, TimeoutExpired
 from typing import Set
 
 import ops
@@ -47,6 +47,7 @@ class CalicoCharm(ops.CharmBase):
         self.cni_options = {}
         self.stored.set_default(
             binaries_installed=False,
+            calico_configured=False,
             service_installed=False,
             credentials_available=False,
             cni_configured=False,
@@ -59,6 +60,7 @@ class CalicoCharm(ops.CharmBase):
         self.framework.observe(self.on.install, self._on_install)
         self.framework.observe(self.on.upgrade_charm, self._on_upgrade)
         self.framework.observe(self.on.config_changed, self._on_config_changed)
+        self.framework.observe(self.on.update_status, self._on_update_status)
 
         self.framework.observe(self.etcd.on.connected, self._on_etcd_connected)
         self.framework.observe(self.etcd.on.available, self._update_calicoctl_env)
@@ -70,6 +72,7 @@ class CalicoCharm(ops.CharmBase):
         self.framework.observe(self.on.sync_resources_action, self._sync_resources)
 
     def _on_etcd_changed(self, event):
+        self.etcd.save_client_credentials(ETCD_CA_PATH, ETCD_CERT_PATH, ETCD_KEY_PATH)
         self.unit.status = MaintenanceStatus("Updating etcd configuration.")
         if self.stored.deployed:
             try:
@@ -79,10 +82,20 @@ class CalicoCharm(ops.CharmBase):
                 event.defer()
 
     def _on_config_changed(self, event):
+        self.unit.status = MaintenanceStatus("Reconfiguring Calico.")
         if self.stored.deployed:
             try:
                 self._configure_calico()
+                self.calico_manifests.apply_manifests()
+                self._set_status()
+            except ManifestClientError:
+                self.unit.status = WaitingStatus("Waiting for Kubernetes API.")
+                log.exception("Failed to apply manifests, will retry.")
+                event.defer()
+                return
             except (CalledProcessError, TimeoutExpired):
+                self.unit.status = WaitingStatus("Configuring Calico.")
+                log.exception("Failed to configure Calico, will retry.")
                 event.defer()
                 return
             except yaml.YAMLError:
@@ -127,23 +140,33 @@ class CalicoCharm(ops.CharmBase):
 
         # Ensure kubeconfig status before moving ahead.
         if not self._get_kubeconfig_status():
-            self.unit.status = WaitingStatus("K8s API unavailable")
+            self.unit.status = WaitingStatus("Waiting for Kubernetes config.")
             log.info("Kubeconfig unavailable, will retry.")
             event.defer()
             return
 
+        if not self.etcd.is_ready:
+            self.unit.status = BlockedStatus("Waiting for etcd.")
+            log.info("etcd is not ready, will retry.")
+            event.defer()
+            return
+
         # If credentials are available, install manifests and configure cni if not already done.
-        if self.etcd.is_ready and not self.stored.deployed:
+        if not self.stored.deployed:
             try:
+                self.etcd.save_client_credentials(ETCD_CA_PATH, ETCD_CERT_PATH, ETCD_KEY_PATH)
                 self._configure_cni()
                 self.calico_manifests.apply_manifests()
-                self.stored.deployed = True
                 self._configure_calico()
+                self.stored.deployed = True
+                self._set_status()
             except ManifestClientError:
+                self.unit.status = WaitingStatus("Installing Calico manifests")
                 log.exception("Failed to install Calico manifests, will retry.")
                 event.defer()
                 return
             except (CalledProcessError, TimeoutExpired):
+                self.unit.status = WaitingStatus("Configuring Calico")
                 log.exception("Failed to configure Calico, will retry.")
                 event.defer()
                 return
@@ -153,11 +176,6 @@ class CalicoCharm(ops.CharmBase):
                     "Invalid Config provided. Please check juju debug-log for more info."
                 )
                 return
-        else:
-            log.info("etcd is not ready, will retry.")
-            event.defer()
-            return
-        self._set_status()
 
     def _set_status(self):
         if self.stored.deployed and self.stored.calico_configured:
@@ -247,6 +265,7 @@ class CalicoCharm(ops.CharmBase):
         }
         spec = bgp_config["spec"]
         spec["asNumber"] = self.config["global-as-number"]
+        spec["nodeToNodeMeshEnabled"] = self.config["node-to-node-mesh"]
         spec.update(
             {
                 ip_mapping[key]: [{"cidr": cidr} for cidr in self.config[key].split()]
@@ -255,6 +274,7 @@ class CalicoCharm(ops.CharmBase):
         )
         try:
             self._calicoctl_apply(bgp_config)
+            log.info("Configured BGP globals.")
         except (CalledProcessError, TimeoutExpired) as e:
             log.exception("Failed to apply BGPConfiguration")
             raise e
@@ -271,6 +291,7 @@ class CalicoCharm(ops.CharmBase):
             node["spec"]["bgp"]["asNumber"] = as_number
             node["spec"]["bgp"]["routeReflectorClusterID"] = route_reflector_cluster_id
             self._calicoctl_apply(node)
+            log.info("Configured Calico node.")
         except (CalledProcessError, TimeoutExpired) as e:
             log.exception("Failed to configure node.")
             raise e
@@ -359,6 +380,7 @@ class CalicoCharm(ops.CharmBase):
 
             for peer in peers_to_delete:
                 self.calicoctl("delete", "bgppeer", peer)
+            log.info("Configured BGP peers.")
         except (CalledProcessError, TimeoutExpired) as e:
             log.exception("Failed to apply BGP peer configuration.")
             raise e
@@ -388,6 +410,7 @@ class CalicoCharm(ops.CharmBase):
             cmd = ["ethtool", "-K", "vxlan.calico", "tx-checksum-ip-generic", "off"]
             try:
                 subprocess.check_call(cmd)
+                log.info("Disabled VXLAN TX checksumming.")
             except CalledProcessError as e:
                 log.exception("Couldn't disable tx checksumming.")
                 raise e
@@ -435,10 +458,14 @@ class CalicoCharm(ops.CharmBase):
                 }
 
                 self._calicoctl_apply(pool)
+            log.info("Configured Calico IP pool.")
 
         except (CalledProcessError, TimeoutExpired) as e:
             log.exception("Failed to modify IP Pools.")
             raise e
+
+    def _on_update_status(self, _):
+        self._set_status()
 
     def _install_calico_binaries(self):
         arch = self._get_arch()
@@ -447,12 +474,13 @@ class CalicoCharm(ops.CharmBase):
         try:
             resource_path = self.model.resources.fetch("calico")
         except ModelError:
-            self.unit.status = BlockedStatus(f"Error claiming {resource_name}.")
+            self.unit.status = BlockedStatus(f"Error claiming {resource_name}")
             log.exception(f"Error claiming {resource_name}")
             return
         except NameError:
             self.unit.status = BlockedStatus(f"Resource {resource_name} not found")
             log.exception(f"Resource {resource_name} not found")
+            return
 
         filesize = os.stat(resource_path).st_size
         if filesize < 1000000:
@@ -467,7 +495,7 @@ class CalicoCharm(ops.CharmBase):
             dst = os.path.join(CALICO_CTL_PATH, "calicoctl")
             install_cmd = ["install", "-v", "-D", origin, dst]
             try:
-                check_call(install_cmd)
+                subprocess.check_call(install_cmd)
             except CalledProcessError:
                 msg = "Failed to install calicoctl"
                 log.exception(msg)
@@ -493,10 +521,6 @@ class CalicoCharm(ops.CharmBase):
         env["ETCD_KEY_FILE"] = ETCD_KEY_PATH
         env["ETCD_CERT_FILE"] = ETCD_CERT_PATH
         env["ETCD_CA_CERT_FILE"] = ETCD_CA_PATH
-        creds = self.etcd.get_client_credentials()
-        Path(ETCD_KEY_PATH).write_text(creds["client_key"])
-        Path(ETCD_CERT_PATH).write_text(creds["client_cert"])
-        Path(ETCD_CA_PATH).write_text(creds["client_ca"])
         return env
 
     def _unpack_archive(self, path: Path, destination: Path):
@@ -594,7 +618,7 @@ class CalicoCharm(ops.CharmBase):
 
     def _calicoctl_apply(self, data):
         with tempfile.TemporaryDirectory() as tmp:
-            filename = tmp + "calicoctl_manifest.yaml"
+            filename = os.path.join(tmp, "calicoctl_manifest.yaml")
             with open(filename, "w") as f:
                 yaml.dump(data, f)
             self.calicoctl("apply", "-f", filename)

@@ -1,13 +1,63 @@
 """This module provides the CalicoManifests class for managing Calico manifests."""
+import hashlib
 import json
 import logging
 from base64 import b64encode
-from typing import Dict
+from typing import Dict, List
 
 from charms.kubernetes_libs.v0.etcd import EtcdReactiveRequires
+from lightkube.models.core_v1 import Container, EnvVar
 from ops.manifests import ConfigRegistry, Manifests, Patch
 
 log = logging.getLogger(__name__)
+
+
+class SetAnnotationCalicoNode(Patch):
+    """A patch class for setting the annotation in a Node DaemonSet."""
+
+    def __call__(self, obj) -> None:
+        """Add the Config hash to the DaemonSet to force a restart."""
+        if not (obj.kind == "DaemonSet" and obj.metadata.name == "calico-node"):
+            return
+
+        log.info("Adding hash to calico-node DaemonSet.")
+
+        obj.spec.template.metadata.annotations = {
+            "juju.is/manifest-hash": self.manifests.config_hash
+        }
+
+
+class SetAnnotationKubeControllers(Patch):
+    """A patch class for setting the annotation in a Kube Controllers Deployment."""
+
+    def __call__(self, obj) -> None:
+        """Add the Config hash to the Kube Controllers Deployment."""
+        if not (obj.kind == "Deployment" and obj.metadata.name == "calico-kube-controllers"):
+            return
+
+        log.info("Adding hash to calico-node DaemonSet.")
+
+        obj.spec.template.metadata.annotations = {
+            "juju.is/manifest-hash": self.manifests.config_hash
+        }
+
+
+class PatchVethMtu(Patch):
+    """A patch class for modifying the MTU value in a ConfigMap."""
+
+    def __call__(self, obj) -> None:
+        """Modify the Calico MTU within the given ConfigMap object."""
+        if not (obj.kind == "ConfigMap" and obj.metadata.name == "calico-config"):
+            return
+
+        log.info("Patching Calico MTU value.")
+
+        data = obj.data
+        if not data:
+            log.warning("calico-config: Unable to patch MTU value, data not found.")
+            return
+        mtu = self.manifests.config.get("mtu")
+        data.update({"veth_mtu": mtu if mtu else "0"})
 
 
 class PatchCalicoConflist(Patch):
@@ -29,17 +79,97 @@ class PatchCalicoConflist(Patch):
         if not json_config:
             return
 
+        # Replace mtu value to avoid json errors
+        json_config.replace("__CNI_MTU__", '"__CNI_MTU__"')
+
         conflist = json.loads(json_config)
 
         for plugin in conflist.get("plugins"):
             if plugin.get("type") == "calico":
-                mtu = self.manifests.config.get("mtu")
-                plugin["mtu"] = mtu if mtu else 0
                 ipam = plugin["ipam"]
                 ipam["assign_ipv4"] = self.manifests.config.get("assign_ipv4")
                 ipam["assign_ipv6"] = self.manifests.config.get("assign_ipv6")
 
-        data["cni_network_config"] = json.dumps(conflist)
+        json_config = json.dumps(conflist)
+        json_config.replace('"__CNI_MTU__"', "__CNI_MTU__")
+
+        data["cni_network_config"] = json_config
+
+
+class SetIPv6Configuration(Patch):
+    """A Patch class for setting the IPv6 configuration for Calico."""
+
+    def __call__(self, obj) -> None:
+        """Set the IPv6 configuration within the given calico/node container."""
+        if not (obj.kind == "DaemonSet" and obj.metadata.name == "calico-node"):
+            return
+
+        log.info("Patching calico-node DaemonSet IPv6.")
+
+        containers: List[Container] = obj.spec.template.spec.containers
+        enable = self.manifests.config.get("IP6") == "autodetect"
+        vars = {
+            "IP6": {"value": self.manifests.config.get("IP6"), "found": False},
+            "FELIX_IPV6SUPPORT": {"value": "true" if enable else "false", "found": False},
+        }
+
+        for container in containers:
+            if container.name == "calico-node":
+                env = container.env
+
+                for v in vars:
+                    for e in env:
+                        if e.name == v:
+                            vars[v]["found"] = True
+                            e.value = vars[v]["value"]
+                for v in vars:
+                    if not vars[v]["found"]:
+                        env.append(EnvVar(v, vars[v]["value"]))
+
+
+class SetNoDefaultPools(Patch):
+    """A Patch class for setting the NO_DEFAULT_POOLS environmental variable."""
+
+    def __call__(self, obj) -> None:
+        """Set the NO_DEFAULT_POOLS within the given calico/node container."""
+        if not (obj.kind == "DaemonSet" and obj.metadata.name == "calico-node"):
+            return
+
+        log.info("Patching calico-node DaemonSet NO_DEFAULT_POOLS.")
+
+        containers: List[Container] = obj.spec.template.spec.containers
+
+        for container in containers:
+            if container.name == "calico-node":
+                env = container.env
+                value = "true" if self.manifests.config.get("manage-pools") else "false"
+                for e in env:
+                    if e.name == "NO_DEFAULT_POOLS":
+                        e.value = value
+                        return
+                ignore_env = EnvVar("NO_DEFAULT_POOLS", value)
+                env.append(ignore_env)
+
+
+class SetIgnoreLooseRPF(Patch):
+    """A Patch class for setting the FELIX_IGNORELOOSERPF environmental variable."""
+
+    def __call__(self, obj) -> None:
+        """Set the FELIX_IGNORELOOSERPF within the given calico/node container."""
+        if not (obj.kind == "DaemonSet" and obj.metadata.name == "calico-node"):
+            return
+        log.info("Patching calico-node DaemonSet.")
+        containers: List[Container] = obj.spec.template.spec.containers
+        for container in containers:
+            if container.name == "calico-node":
+                env = container.env
+                value = "true" if self.manifests.config.get("ignore-loose-rpf") else "false"
+                for e in env:
+                    if e.name == "FELIX_IGNORELOOSERPF":
+                        e.value = value
+                        return
+                ignore_env = EnvVar("FELIX_IGNORELOOSERPF", value)
+                env.append(ignore_env)
 
 
 class SetEtcdEndpoints(Patch):
@@ -129,6 +259,11 @@ class CalicoManifests(Manifests):
             SetEtcdEndpoints(self),
             SetEtcdSecrets(self),
             PatchCalicoConflist(self),
+            SetIgnoreLooseRPF(self),
+            SetIPv6Configuration(self),
+            PatchVethMtu(self),
+            SetAnnotationCalicoNode(self),
+            SetAnnotationKubeControllers(self),
         ]
 
         super().__init__("calico", charm.model, "upstream/calico", manipulations)
@@ -144,6 +279,7 @@ class CalicoManifests(Manifests):
             dict: The merged configuration.
         """
         config = {}
+        config.update({"connection_string": self.etcd.get_connection_string()})
         config.update(self.etcd.get_client_credentials())
 
         config.update(**self.charm_config)
@@ -155,3 +291,15 @@ class CalicoManifests(Manifests):
 
         config["release"] = config.pop("release", None)
         return config
+
+    @property
+    def config_hash(self) -> str:
+        """Return the configuration SHA256 hash from the charm config.
+
+        Returns:
+            str: The SHA256 hash
+        """
+        json_str = json.dumps(self.config, sort_keys=True)
+        hash = hashlib.sha256()
+        hash.update(json_str.encode())
+        return hash.hexdigest()
