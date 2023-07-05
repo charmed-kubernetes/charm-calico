@@ -264,7 +264,8 @@ def test_get_kubeconfig_status(harness, charm):
         pytest.param(False, id="Calico not ready"),
     ],
 )
-def test_set_status(charm: CalicoCharm, ready: bool):
+@mock.patch("charm.CalicoCharm._is_rpf_config_mismatched", return_value=False)
+def test_set_status(mock_rpf: mock.MagicMock, charm: CalicoCharm, ready: bool):
     with mock.patch.object(charm.unit, "set_workload_version") as mock_set:
         charm.stored.deployed = ready
         charm.stored.calico_configured = ready
@@ -274,6 +275,15 @@ def test_set_status(charm: CalicoCharm, ready: bool):
             assert charm.unit.status == ActiveStatus("Ready")
         else:
             mock_set.assert_not_called()
+
+
+@mock.patch("charm.CalicoCharm._is_rpf_config_mismatched", return_value=True)
+def test_set_status_rpf_mismatched(mock_rpf: mock.MagicMock, charm: CalicoCharm):
+    with mock.patch.object(charm.unit, "set_workload_version"):
+        charm._set_status()
+        assert charm.unit.status == BlockedStatus(
+            "ignore-loose-rpf config is in conflict with rp_filter value"
+        )
 
 
 def test_on_etcd_connected(charm: CalicoCharm):

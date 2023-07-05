@@ -178,6 +178,11 @@ class CalicoCharm(ops.CharmBase):
                 return
 
     def _set_status(self):
+        if self._is_rpf_config_mismatched():
+            self.unit.status = BlockedStatus(
+                "ignore-loose-rpf config is in conflict with rp_filter value"
+            )
+            return
         if self.stored.deployed and self.stored.calico_configured:
             self.unit.set_workload_version(self.collector.short_version)
             self.unit.status = ActiveStatus("Ready")
@@ -589,6 +594,16 @@ class CalicoCharm(ops.CharmBase):
             get_networks('192.168.0.0/24,10.0.0.0/16') returns [IPv4Network('192.168.0.0/24'), IPv4Network('10.0.0.0/16')]
         """
         return [self._get_network(cidr) for cidr in cidrs.split(",")]
+
+    def _is_rpf_config_mismatched(self):
+        with open("/proc/sys/net/ipv4/conf/all/rp_filter") as f:
+            rp_filter = int(f.read())
+        ignore_loose_rpf = self.config.get("ignore-loose-rpf")
+        if rp_filter == 2 and not ignore_loose_rpf:
+            # calico says this is invalid
+            # https://github.com/kubernetes-sigs/kind/issues/891
+            return True
+        return False
 
     def calicoctl(self, *args, timeout: int = 60):
         """Call calicoctl with specified args.
