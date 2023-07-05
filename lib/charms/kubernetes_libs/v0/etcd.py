@@ -60,7 +60,7 @@ from ops.framework import EventBase, EventSource, Object, ObjectEvents, StoredSt
 from ops.model import Relation
 
 # The unique Charmhub library identifier, never change it
-LIBID = "6ff313b3031a4ab0a1b034ca3ba9d901"
+LIBID = "2d422394fe044d61ad1dc044ed051d1b"
 
 # Increment this major API version when introducing breaking changes
 LIBAPI = 0
