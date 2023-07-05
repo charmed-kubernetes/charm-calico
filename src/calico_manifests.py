@@ -6,10 +6,54 @@ from base64 import b64encode
 from typing import Dict, List
 
 from charms.kubernetes_libs.v0.etcd import EtcdReactiveRequires
+from lightkube.codecs import AnyResource
 from lightkube.models.core_v1 import Container, EnvVar
 from ops.manifests import ConfigRegistry, Manifests, Patch
 
 log = logging.getLogger(__name__)
+
+
+class PatchIPAutodetectionMethod(Patch):
+    """A Patch class for IP autodetection method in Calico Node."""
+
+    def __call__(self, obj) -> None:
+        """Modify the calico-node DaemonSet's environment variables to adjust the IP auto-detection method."""
+        if not (obj.kind == "DaemonSet" and obj.metadata.name == "calico-node"):
+            return
+
+        log.info("Patching calico-node IP autodetection method.")
+        containers: List[Container] = obj.spec.template.spec.containers
+        for container in containers:
+            if container.name == "calico-node":
+                env = container.env
+                ipauto_env = EnvVar("IP_AUTODETECTION_METHOD", "skip-interface=lxd.*,fan.*")
+                env.append(ipauto_env)
+
+
+class PatchValuesKubeControllers(Patch):
+    """A patch class for allowing migration from EnvVars to Secrets in Kube Controllers."""
+
+    def __call__(self, obj: AnyResource) -> None:
+        """Modify the calico-kube-controllers Deployment's environment variables."""
+        if not (obj.kind == "Deployment" and obj.metadata.name == "calico-kube-controllers"):
+            return
+
+        containers: List[Container] = obj.spec.template.spec.containers
+        enable = self.manifests.config.get("IP6") == "autodetect"
+        vars = {
+            "IP6": {"value": self.manifests.config.get("IP6"), "found": False},
+            "FELIX_IPV6SUPPORT": {"value": "true" if enable else "false", "found": False},
+        }
+
+        for container in containers:
+            if container.name == "calico-kube-controllers":
+                env = container.env
+
+                for v in vars:
+                    for e in env:
+                        if e.name.startswith("ETCD"):
+                            # e.value = "null"
+                            log.warning(f"EnvVar: {e.name} = {e}")
 
 
 class SetAnnotationCalicoNode(Patch):
@@ -264,6 +308,7 @@ class CalicoManifests(Manifests):
             PatchVethMtu(self),
             SetAnnotationCalicoNode(self),
             SetAnnotationKubeControllers(self),
+            PatchValuesKubeControllers(self),
         ]
 
         super().__init__("calico", charm.model, "upstream/calico", manipulations)
