@@ -60,9 +60,9 @@ data:
   etcd_endpoints: "http://<ETCD_IP>:<ETCD_PORT>"
   # If you're using TLS enabled etcd uncomment the following.
   # You must also populate the Secret below with these files.
-  etcd_ca: "/calico-secrets/etcd-ca"
-  etcd_cert: "/calico-secrets/etcd-cert"
-  etcd_key: "/calico-secrets/etcd-key"
+  etcd_ca: ""   # "/calico-secrets/etcd-ca"
+  etcd_cert: "" # "/calico-secrets/etcd-cert"
+  etcd_key: ""  # "/calico-secrets/etcd-key"
   # Typha is disabled.
   typha_service_name: "none"
   # Configure the backend to use.
@@ -88,7 +88,7 @@ data:
           "etcd_key_file": "__ETCD_KEY_FILE__",
           "etcd_cert_file": "__ETCD_CERT_FILE__",
           "etcd_ca_cert_file": "__ETCD_CA_CERT_FILE__",
-          "mtu": 10,
+          "mtu": __CNI_MTU__,
           "ipam": {
               "type": "calico-ipam"
           },
@@ -346,9 +346,6 @@ spec:
               name: kubernetes-services-endpoint
               optional: true
           env:
-            # CK edit: Add IP_AUTODETECTION to avoid using lxd|fan interfaces
-            - name: IP_AUTODETECTION_METHOD
-              value: "skip-interface=lxd.*,fan.*"
             # The location of the etcd cluster.
             - name: ETCD_ENDPOINTS
               valueFrom:
@@ -392,7 +389,7 @@ spec:
               value: "autodetect"
             # Enable IPIP
             - name: CALICO_IPV4POOL_IPIP
-              value: "Never"
+              value: "Always"
             # Enable or Disable VXLAN on the default IP pool.
             - name: CALICO_IPV4POOL_VXLAN
               value: "Never"
@@ -549,8 +546,6 @@ metadata:
   namespace: kube-system
   labels:
     k8s-app: calico-kube-controllers
-    # CK edit: Add cdk-restart-on-ca-change label
-    cdk-restart-on-ca-change: "true"
 spec:
   # The controllers can only have a single active instance.
   replicas: 1
@@ -565,11 +560,6 @@ spec:
       namespace: kube-system
       labels:
         k8s-app: calico-kube-controllers
-      # CK edit: Add cdk-etcd-cert-last-modified annotation
-      annotations:
-        # annotate etcd cert modification time, so that when it changes, k8s
-        # will restart the pod
-        cdk-etcd-cert-last-modified: "foo"
     spec:
       nodeSelector:
         kubernetes.io/os: linux
@@ -591,31 +581,26 @@ spec:
           image: docker.io/calico/kube-controllers:v3.25.1
           imagePullPolicy: IfNotPresent
           env:
-            # CK edit: Adding value: null to address the upgrade to ENV from secrets.
             # The location of the etcd cluster.
             - name: ETCD_ENDPOINTS
-              value: null
               valueFrom:
                 configMapKeyRef:
                   name: calico-config
                   key: etcd_endpoints
             # Location of the CA certificate for etcd.
             - name: ETCD_CA_CERT_FILE
-              value: null
               valueFrom:
                 configMapKeyRef:
                   name: calico-config
                   key: etcd_ca
             # Location of the client key for etcd.
             - name: ETCD_KEY_FILE
-              value: null
               valueFrom:
                 configMapKeyRef:
                   name: calico-config
                   key: etcd_key
             # Location of the client certificate for etcd.
             - name: ETCD_CERT_FILE
-              value: null
               valueFrom:
                 configMapKeyRef:
                   name: calico-config

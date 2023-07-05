@@ -13,6 +13,59 @@ from ops.manifests import ConfigRegistry, Manifests, Patch
 log = logging.getLogger(__name__)
 
 
+class PatchEncapsulation(Patch):
+    """A Patch class for setting encapsulation in Calico."""
+
+    def __call__(self, obj) -> None:
+        """Modify the calico-node encapsulation mode."""
+        if not (obj.kind == "DaemonSet" and obj.metadata.name == "calico-node"):
+            return
+
+        log.info("Patching calico-node DaemonSet encapsulation.")
+
+        containers: List[Container] = obj.spec.template.spec.containers
+        vars = {
+            "CALICO_IPV4POOL_VXLAN": {"value": self.manifests.config.get("vxlan"), "found": False},
+            "CALICO_IPV4POOL_IPIP": {"value": self.manifests.config.get("ipip"), "found": False},
+        }
+
+        for container in containers:
+            if container.name == "calico-node":
+                env = container.env
+
+                for v in vars:
+                    for e in env:
+                        if e.name == v:
+                            vars[v]["found"] = True
+                            e.value = vars[v]["value"]
+                for v in vars:
+                    if not vars[v]["found"]:
+                        env.append(EnvVar(v, vars[v]["value"]))
+
+
+class PatchEtcdPaths(Patch):
+    """A Patch class for setting the Etcd Paths in Calico."""
+
+    def __call__(self, obj) -> None:
+        """Modify the calico-config etcd variables to adjust the certificate paths."""
+        if not (obj.kind == "ConfigMap" and obj.metadata.name == "calico-config"):
+            return
+
+        log.info("Patching Calico etcd paths.")
+
+        data = obj.data
+        if not data:
+            log.warning("calico-config: Unable to patch etcd paths, data not found.")
+            return
+        data.update(
+            {
+                "etcd_ca": "/calico-secrets/etcd-ca",
+                "etcd_cert": "/calico-secrets/etcd-cert",
+                "etcd_key": "/calico-secrets/etcd-key",
+            }
+        )
+
+
 class PatchIPAutodetectionMethod(Patch):
     """A Patch class for IP autodetection method in Calico Node."""
 
@@ -39,21 +92,13 @@ class PatchValuesKubeControllers(Patch):
             return
 
         containers: List[Container] = obj.spec.template.spec.containers
-        enable = self.manifests.config.get("IP6") == "autodetect"
-        vars = {
-            "IP6": {"value": self.manifests.config.get("IP6"), "found": False},
-            "FELIX_IPV6SUPPORT": {"value": "true" if enable else "false", "found": False},
-        }
 
         for container in containers:
             if container.name == "calico-kube-controllers":
                 env = container.env
-
-                for v in vars:
-                    for e in env:
-                        if e.name.startswith("ETCD"):
-                            # e.value = "null"
-                            log.warning(f"EnvVar: {e.name} = {e}")
+                for e in env:
+                    if e.name.startswith("ETCD"):
+                        e.value = None
 
 
 class SetAnnotationCalicoNode(Patch):
@@ -124,7 +169,7 @@ class PatchCalicoConflist(Patch):
             return
 
         # Replace mtu value to avoid json errors
-        json_config.replace("__CNI_MTU__", '"__CNI_MTU__"')
+        json_config = json_config.replace("__CNI_MTU__", '"__CNI_MTU__"')
 
         conflist = json.loads(json_config)
 
@@ -135,7 +180,7 @@ class PatchCalicoConflist(Patch):
                 ipam["assign_ipv6"] = self.manifests.config.get("assign_ipv6")
 
         json_config = json.dumps(conflist)
-        json_config.replace('"__CNI_MTU__"', "__CNI_MTU__")
+        json_config = json_config.replace('"__CNI_MTU__"', "__CNI_MTU__")
 
         data["cni_network_config"] = json_config
 
@@ -309,6 +354,9 @@ class CalicoManifests(Manifests):
             SetAnnotationCalicoNode(self),
             SetAnnotationKubeControllers(self),
             PatchValuesKubeControllers(self),
+            PatchIPAutodetectionMethod(self),
+            PatchEtcdPaths(self),
+            PatchEncapsulation(self),
         ]
 
         super().__init__("calico", charm.model, "upstream/calico", manipulations)
