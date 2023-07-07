@@ -1,12 +1,10 @@
 name: calico
 summary: A robust Software Defined Network from Project Calico
 maintainers:
-  - Tim Van Steenburgh <tim.van.steenburgh@canonical.com>
   - George Kraft <george.kraft@canonical.com>
   - Konstantinos Tsakalozos <kos.tsakalozos@canonical.com>
-  - Mike Wilson <mike.wilson@canonical.com>
   - Kevin Monroe <kevin.monroe@canonical.com>
-  - Joe Borg <joseph.borg@canonical.com>
+  - Mateo Florido <mateo.florido@canonical.com>
 description: |
   Deploys Calico as a background service and configures CNI for use with
   calico on any principal charm that implements the kubernetes-cni interface.
@@ -32,7 +30,3 @@ resources:
     type: file
     filename: calico.tar.gz
     description: 'Calico resource tarball for arm64'
-  calico-node-image:
-    type: file
-    filename: calico-node-image.tar.gz
-    description: 'calico-node container image'

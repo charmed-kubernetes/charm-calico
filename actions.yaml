@@ -1,0 +1,30 @@
+list-versions:
+  description: List Calico Versions supported by this charm
+list-resources:
+  description: List  Provider and Storage Resources of configured version
+  params:
+    resources:
+      type: string
+      default: ""
+      description: |
+        Space separated list of kubernetes resource types to filter list result
+scrub-resources:
+  description: Remove deployments other than the current one
+  params:
+    resources:
+      type: string
+      default: ""
+      description: |
+        Space separated list of kubernetes resource types to filter scrubbing   
+sync-resources:
+  description: |
+    Add kubernetes resources which should be created by this charm which aren't
+    present within the cluster.
+  params:
+    resources:
+      type: string
+      default: ""
+      description: |
+        Space separated list of kubernetes resource types
+        to use a filter during the sync. This helps limit
+        which missing resources are applied.

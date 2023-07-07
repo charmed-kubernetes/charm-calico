@@ -2,7 +2,7 @@
 set -eux
 
 # This script will fetch binaries and create resource tarballs for use by
-# charm-[push|release]. The arm64 binaries are not available upsteram for
+# charm-[push|release]. The arm64 binaries are not available upstream for
 # v2.6, so we must build them and host them somewhere ourselves. The steps
 # for doing that are documented here:
 #
@@ -56,8 +56,6 @@ for arch in ${arches}; do
   mkdir resource-build-$arch
   pushd resource-build-$arch
   cp ../release-$calico_version/bin/calicoctl/calicoctl-linux-$arch calicoctl
-  cp ../release-$calico_version/bin/cni/$arch/calico calico
-  cp ../release-$calico_version/bin/cni/$arch/calico-ipam calico-ipam
 
   tar -zcvf ../calico-$arch.tar.gz .
 
@@ -66,5 +64,3 @@ for arch in ${arches}; do
 done
 
 rm -rf release-$calico_version.tgz release-$calico_version
-
-touch calico-node-image.tar.gz

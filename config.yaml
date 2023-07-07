@@ -26,17 +26,6 @@ options:
 
       Example value: ”10.0.0.0/24 10.0.1.0/24”
     default: ""
-  calico-node-image:
-    type: string
-    # Please refer to layer-canal/versioning.md before changing the version below.
-    default: rocks.canonical.com:443/cdk/calico/node:v3.25.1
-    description: |
-      The image id to use for calico/node.
-  calico-policy-image:
-    type: string
-    default: rocks.canonical.com:443/cdk/calico/kube-controllers:v3.25.1
-    description: |
-      The image id to use for calico/kube-controllers.
   ipip:
     type: string
     default: Never
@@ -44,6 +33,13 @@ options:
       IPIP encapsulation mode. Must be one of "Always", "CrossSubnet", or "Never".
       This is incompatible with VXLAN encapsulation. If VXLAN encapsulation is
       enabled, then this must be set to "Never".
+  image-registry:
+    default: rocks.canonical.com:443/cdk
+    type: string
+    description: |
+      Source registry of Calico images.
+      By setting to a value, each image listed in the releases manifest
+      has its image-registry replaced.
   vxlan:
     type: string
     default: Never
@@ -175,3 +171,6 @@ options:
       disable TX checksumming on the vxlan.calico network interface. This works
       around an upstream issue in Calico:
       https://github.com/projectcalico/calico/issues/3145
+  release:
+    description: Version of Calico to deploy
+    type: string
