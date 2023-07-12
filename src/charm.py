@@ -538,16 +538,16 @@ class CalicoCharm(ops.CharmBase):
 
     def _list_resources(self, event):
         resources = event.params.get("resources", "")
-        return self.collector.list_resources(event, resources=resources)
+        return self.collector.list_resources(event, manifests=None, resources=resources)
 
     def _scrub_resources(self, event):
         resources = event.params.get("resources", "")
-        return self.collector.scrub_resources(event, resources=resources)
+        return self.collector.scrub_resources(event, manifests=None, resources=resources)
 
     def _sync_resources(self, event):
         resources = event.params.get("resources", "")
         try:
-            self.collector.apply_missing_resources(event, resources=resources)
+            self.collector.apply_missing_resources(event, manifests=None, resources=resources)
         except ManifestClientError:
             msg = "Failed to apply missing resources. API Server unavailable."
             event.set_results({"result": msg})
