@@ -29,7 +29,6 @@ log = logging.getLogger(__name__)
 VALID_LOG_LEVELS = ["info", "debug", "warning", "error", "critical"]
 
 CALICO_CTL_PATH = "/opt/calicoctl"
-CNI_BIN_PATH = "/opt/cni/bin"
 CALICO_CNI_CONFIG_PATH = "/etc/cni/net.d/10-calico.conflist"
 ETCD_KEY_PATH = os.path.join(CALICO_CTL_PATH, "etcd-key")
 ETCD_CERT_PATH = os.path.join(CALICO_CTL_PATH, "etcd-cert")
@@ -227,20 +226,6 @@ class CalicoCharm(ops.CharmBase):
             log.info(f"{service_name} service removed and daemon reloaded.")
         else:
             log.info(f"{service_name} service successfully uninstalled.")
-
-        # Remove calico-node binaries
-        calico_path = os.path.join(os.sep, CNI_BIN_PATH, "calico")
-        if os.path.isfile(calico_path):
-            os.remove(calico_path)
-            log.info("calico binary uninstalled.")
-        else:
-            log.info("calico binary successfully uninstalled.")
-        ipam_path = os.path.join(os.sep, CNI_BIN_PATH, "calico-ipam")
-        if os.path.isfile(ipam_path):
-            os.remove(ipam_path)
-            log.info("calico-ipam binary uninstalled.")
-        else:
-            log.info("calico-ipam binary successfully uninstalled.")
 
     def _get_ip_versions(self) -> Set[int]:
         return {net.version for net in self._get_networks(self.config["cidr"])}
