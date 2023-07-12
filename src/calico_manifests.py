@@ -68,7 +68,8 @@ class PatchValuesKubeControllers(Patch):
                 env = container.env
                 for e in env:
                     if e.name.startswith("ETCD"):
-                        e.value = None
+                        # blank the `value` with <space> field rather using `None`
+                        e.value = ""
 
 
 class SetAnnotationCalicoNode(Patch):
