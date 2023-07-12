@@ -332,7 +332,6 @@ def test_remove_calico_reactive(
     detected: bool,
 ):
     service_path = os.path.join(os.sep, "lib", "systemd", "system", "calico-node.service")
-    cni_bin_path = "/opt/cni/bin/"
     mocks = (mock_running, mock_stop, mock_reload, mock_isfile)
 
     for mock_obj in mocks:
@@ -344,8 +343,6 @@ def test_remove_calico_reactive(
     mock_isfile.assert_has_calls(
         [
             mock.call(service_path),
-            mock.call(cni_bin_path + "calico"),
-            mock.call(cni_bin_path + "calico-ipam"),
         ]
     )
 
@@ -355,20 +352,14 @@ def test_remove_calico_reactive(
         mock_remove.assert_has_calls(
             [
                 mock.call(service_path),
-                mock.call(cni_bin_path + "calico"),
-                mock.call(cni_bin_path + "calico-ipam"),
             ]
         )
 
         assert "calico-node service stopped." in caplog.text
         assert "calico-node service removed and daemon reloaded." in caplog.text
-        assert "calico binary uninstalled." in caplog.text
-        assert "calico-ipam binary uninstalled." in caplog.text
     else:
         assert "calico-node service successfully stopped." in caplog.text
         assert "calico-node service successfully uninstalled." in caplog.text
-        assert "calico binary successfully uninstalled." in caplog.text
-        assert "calico-ipam binary successfully uninstalled." in caplog.text
 
 
 @mock.patch("charm.CalicoCharm._get_networks")
