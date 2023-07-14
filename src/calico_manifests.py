@@ -13,6 +13,20 @@ from ops.manifests import ConfigRegistry, Manifests, Patch
 log = logging.getLogger(__name__)
 
 
+class PatchCDKOnCAChange(Patch):
+    """A Patch class for setting a label in calico-kube-controllers."""
+
+    def __call__(self, obj) -> None:
+        """Add the cdk-restart-on-ca-changed label to calico-kube-controllers."""
+        if not (obj.kind == "Deployment" and obj.metadata.name == "calico-kube-controllers"):
+            return
+
+        log.info("Patching Calico Kube Controllers cdk-restart-on-ca-changed label.")
+        label = {"cdk-restart-on-ca-change": "true"}
+        obj.metadata.labels = obj.metadata.labels or {}
+        obj.metadata.labels.update(label)
+
+
 class PatchEtcdPaths(Patch):
     """A Patch class for setting the Etcd Paths in Calico."""
 
@@ -326,6 +340,7 @@ class CalicoManifests(Manifests):
             PatchValuesKubeControllers(self),
             PatchIPAutodetectionMethod(self),
             PatchEtcdPaths(self),
+            PatchCDKOnCAChange(self),
         ]
 
         super().__init__("calico", charm.model, "upstream/calico", manipulations)
