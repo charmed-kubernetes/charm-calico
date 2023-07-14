@@ -941,9 +941,13 @@ def test_install_calico_resources_filesize(
 
 
 @mock.patch("charm.CalicoCharm._get_calicoctl_env")
-@mock.patch("builtins.open")
+@mock.patch("pathlib.Path.mkdir")
+@mock.patch("pathlib.Path.open")
 def test_update_calicoctl_env(
-    mock_open: mock.MagicMock, mock_get_env: mock.MagicMock, charm: CalicoCharm
+    mock_open: mock.MagicMock,
+    mock_path: mock.MagicMock,
+    mock_get_env: mock.MagicMock,
+    charm: CalicoCharm,
 ):
     env = {
         "ETCD_ENDPOINTS": "/foo/path/endpoints",
@@ -955,7 +959,8 @@ def test_update_calicoctl_env(
     mock_event = mock.MagicMock()
     charm._update_calicoctl_env(mock_event)
 
-    mock_open.assert_called_once_with("/opt/calicoctl/calicoctl.env", "w")
+    mock_path.assert_called_once_with(parents=True, exist_ok=True)
+    mock_open.assert_called_once_with("w")
     handle = mock_open().__enter__()
     handle.write.assert_called_once_with(
         "export ETCD_CA_CERT_FILE=/foo/path/ca\nexport ETCD_CERT_FILE=/foo/path/cert\nexport ETCD_ENDPOINTS=/foo/path/endpoints\nexport ETCD_KEY_FILE=/foo/path/key"

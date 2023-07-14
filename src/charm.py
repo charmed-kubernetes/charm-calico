@@ -502,7 +502,9 @@ class CalicoCharm(ops.CharmBase):
         env = self._get_calicoctl_env()
         lines = [f"export {key}={value}" for key, value in sorted(env.items())]
         output = "\n".join(lines)
-        with open("/opt/calicoctl/calicoctl.env", "w") as f:
+        calicoctl_env = Path("/opt/calicoctl/calicoctl.env")
+        calicoctl_env.parent.mkdir(parents=True, exist_ok=True)
+        with calicoctl_env.open("w") as f:
             f.write(output)
 
     def _get_calicoctl_env(self):
