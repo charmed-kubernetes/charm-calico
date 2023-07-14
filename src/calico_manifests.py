@@ -8,23 +8,33 @@ from typing import Dict, List
 from charms.kubernetes_libs.v0.etcd import EtcdReactiveRequires
 from lightkube.codecs import AnyResource
 from lightkube.models.core_v1 import Container, EnvVar
-from ops.manifests import ConfigRegistry, Manifests, Patch
+from ops.manifests import ConfigRegistry, ManifestLabel, Manifests, Patch
 
 log = logging.getLogger(__name__)
 
 
 class PatchCDKOnCAChange(Patch):
-    """A Patch class for setting a label in calico-kube-controllers."""
+    """Patch Deployments/Daemonsets to be apart of cdk-restart-on-ca-change.
 
-    def __call__(self, obj) -> None:
-        """Add the cdk-restart-on-ca-changed label to calico-kube-controllers."""
-        if not (obj.kind == "Deployment" and obj.metadata.name == "calico-kube-controllers"):
+    * adding the config hash as an annotation
+    * adding a cdk restart label
+    """
+
+    def __call__(self, obj: AnyResource) -> None:
+        """Modify the calico-kube-controllers Deployment and calico-node DaemonSet."""
+        if obj.kind not in ["Deployment", "DaemonSet"]:
             return
 
-        log.info("Patching Calico Kube Controllers cdk-restart-on-ca-changed label.")
+        title = f"{obj.kind}/{obj.metadata.name.title().replace('-', ' ')}"
+        log.info(f"Patching {title} cdk-restart-on-ca-changed label.")
         label = {"cdk-restart-on-ca-change": "true"}
         obj.metadata.labels = obj.metadata.labels or {}
         obj.metadata.labels.update(label)
+
+        log.info(f"Adding hash to {title}.")
+        obj.spec.template.metadata.annotations = {
+            "juju.is/manifest-hash": self.manifests.config_hash
+        }
 
 
 class PatchEtcdPaths(Patch):
@@ -70,50 +80,21 @@ class PatchIPAutodetectionMethod(Patch):
 class PatchValuesKubeControllers(Patch):
     """A patch class for allowing migration from EnvVars to Secrets in Kube Controllers."""
 
+    NAME = "calico-kube-controllers"
+
     def __call__(self, obj: AnyResource) -> None:
         """Modify the calico-kube-controllers Deployment's environment variables."""
-        if not (obj.kind == "Deployment" and obj.metadata.name == "calico-kube-controllers"):
+        if not (obj.kind == "Deployment" and obj.metadata.name == self.NAME):
             return
 
         containers: List[Container] = obj.spec.template.spec.containers
-
         for container in containers:
-            if container.name == "calico-kube-controllers":
+            if container.name == self.NAME:
                 env = container.env
                 for e in env:
                     if e.name.startswith("ETCD"):
                         # blank the `value` with <space> field rather using `None`
                         e.value = ""
-
-
-class SetAnnotationCalicoNode(Patch):
-    """A patch class for setting the annotation in a Node DaemonSet."""
-
-    def __call__(self, obj) -> None:
-        """Add the Config hash to the DaemonSet to force a restart."""
-        if not (obj.kind == "DaemonSet" and obj.metadata.name == "calico-node"):
-            return
-
-        log.info("Adding hash to calico-node DaemonSet.")
-
-        obj.spec.template.metadata.annotations = {
-            "juju.is/manifest-hash": self.manifests.config_hash
-        }
-
-
-class SetAnnotationKubeControllers(Patch):
-    """A patch class for setting the annotation in a Kube Controllers Deployment."""
-
-    def __call__(self, obj) -> None:
-        """Add the Config hash to the Kube Controllers Deployment."""
-        if not (obj.kind == "Deployment" and obj.metadata.name == "calico-kube-controllers"):
-            return
-
-        log.info("Adding hash to calico-node DaemonSet.")
-
-        obj.spec.template.metadata.annotations = {
-            "juju.is/manifest-hash": self.manifests.config_hash
-        }
 
 
 class PatchVethMtu(Patch):
@@ -267,17 +248,29 @@ class SetEtcdEndpoints(Patch):
 class SetEtcdSecrets(Patch):
     """A Patch class for modifying the Calico etcd Secret."""
 
+    CONFIG_MAP = {
+        "etcd-key": "client_key",
+        "etcd-cert": "client_cert",
+        "etcd-ca": "client_ca",
+    }
+
     def __call__(self, obj) -> None:
         """Modify the Calico etcd Secret by updating its data."""
         if not (obj.kind == "Secret" and obj.metadata.name == "calico-etcd-secrets"):
             return
 
+        values = {}
+        for secret_key, manifest_key in self.CONFIG_MAP.items():
+            val = self.manifests.config.get(manifest_key)
+            enc = self._encode_base64(val)
+            if enc:
+                values[secret_key] = enc
+
+        if not values:
+            log.info("Etcd secrets unavailable to patch.")
+            return
+
         log.info("Patching Calico etcd Secret.")
-        values = {
-            "etcd-key": self._encode_base64(self.manifests.config["client_key"]),
-            "etcd-cert": self._encode_base64(self.manifests.config["client_cert"]),
-            "etcd-ca": self._encode_base64(self.manifests.config["client_ca"]),
-        }
         data = obj.data
         if data:
             data.update(values)
@@ -335,12 +328,11 @@ class CalicoManifests(Manifests):
             SetIgnoreLooseRPF(self),
             SetIPv6Configuration(self),
             PatchVethMtu(self),
-            SetAnnotationCalicoNode(self),
-            SetAnnotationKubeControllers(self),
             PatchValuesKubeControllers(self),
             PatchIPAutodetectionMethod(self),
             PatchEtcdPaths(self),
             PatchCDKOnCAChange(self),
+            ManifestLabel(self),
         ]
 
         super().__init__("calico", charm.model, "upstream/calico", manipulations)
