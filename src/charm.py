@@ -462,7 +462,7 @@ class CalicoCharm(ops.CharmBase):
         resource_name = "calico" if arch == "amd64" else f"calico-{arch}"
 
         try:
-            resource_path = self.model.resources.fetch("calico")
+            resource_path = self.model.resources.fetch(resource_name)
         except ModelError:
             self.unit.status = BlockedStatus(f"Error claiming {resource_name}")
             log.exception(f"Error claiming {resource_name}")
