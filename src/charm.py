@@ -42,8 +42,9 @@ def conctl_stop(container):
     try:
         proc = ctl.delete(container)
     except CalledProcessError as e:
-        if f"{container} not found" not in e.stderr.decode():
-            raise
+        if f"{container} not found" in e.stderr.decode():
+            return True
+        raise
     return proc.returncode == 0
 
 
