@@ -49,3 +49,9 @@ def charm(request, harness: Harness[CalicoCharm]):
 def lk_client():
     with mock.patch("ops.manifests.manifest.Client", autospec=True) as mock_lightkube:
         yield mock_lightkube.return_value
+
+
+@pytest.fixture(autouse=True)
+def conctl():
+    with mock.patch("charm.getContainerRuntimeCtl", autospec=True) as mock_conctl:
+        yield mock_conctl.return_value
