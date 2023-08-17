@@ -10,7 +10,7 @@ import unittest.mock as mock
 from asyncio import subprocess
 from ipaddress import ip_network
 from pathlib import Path
-from subprocess import CalledProcessError
+from subprocess import CalledProcessError, CompletedProcess
 from typing import Optional, Set
 
 import ops
@@ -328,6 +328,7 @@ def test_remove_calico_reactive(
     mock_stop: mock.MagicMock,
     mock_running: mock.MagicMock,
     charm: CalicoCharm,
+    conctl,
     caplog,
     detected: bool,
 ):
@@ -345,6 +346,8 @@ def test_remove_calico_reactive(
             mock.call(service_path),
         ]
     )
+    conctl.delete.return_value = CompletedProcess([], 0)
+    conctl.delete.assert_called_once_with("calico-node")
 
     if detected:
         mock_stop.assert_called_once_with("calico-node")

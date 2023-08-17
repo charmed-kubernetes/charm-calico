@@ -20,6 +20,7 @@ import yaml
 from calico_manifests import CalicoManifests
 from charms.kubernetes_libs.v0.etcd import EtcdReactiveRequires
 from charms.operator_libs_linux.v1.systemd import daemon_reload, service_running, service_stop
+from conctl import getContainerRuntimeCtl
 from ops.framework import StoredState
 from ops.manifests import Collector, ManifestClientError
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, ModelError, WaitingStatus
@@ -33,6 +34,18 @@ CALICO_CNI_CONFIG_PATH = "/etc/cni/net.d/10-calico.conflist"
 ETCD_KEY_PATH = os.path.join(CALICO_CTL_PATH, "etcd-key")
 ETCD_CERT_PATH = os.path.join(CALICO_CTL_PATH, "etcd-cert")
 ETCD_CA_PATH = os.path.join(CALICO_CTL_PATH, "etcd-ca")
+
+
+def conctl_stop(container):
+    """Stop a container with runc independent conctl."""
+    ctl = getContainerRuntimeCtl()
+    try:
+        proc = ctl.delete(container)
+    except CalledProcessError as e:
+        if b"not found" in e.stderr:
+            return True
+        raise
+    return proc.returncode == 0
 
 
 class CalicoCharm(ops.CharmBase):
@@ -219,6 +232,9 @@ class CalicoCharm(ops.CharmBase):
                 log.info(f"{service_name} service stopped.")
         else:
             log.info(f"{service_name} service successfully stopped.")
+
+        if conctl_stop(service_name):
+            log.info(f"{service_name} container stopped.")
 
         if os.path.isfile(service_path):
             os.remove(service_path)
