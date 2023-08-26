@@ -693,7 +693,7 @@ def test_configure_bgp_peers_raises(
                 "assign_ipv6": "false",
                 "IP6": "none",
             },
-            id="Dualstack",
+            id="Singlestack",
         ),
     ],
 )
@@ -713,7 +713,7 @@ def test_configure_cni(
 
     charm._configure_cni()
 
-    assert charm.cni_options == expected_config
+    assert charm.calico_manifests.cni_config == expected_config
     assert charm.stored.cni_configured
     mock_mtu.assert_called_once()
     mock_propagate.assert_called_once()

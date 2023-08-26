@@ -56,7 +56,6 @@ class CalicoCharm(ops.CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.etcd = EtcdReactiveRequires(self)
-        self.cni_options = {}
         self.stored.set_default(
             binaries_installed=False,
             calico_configured=False,
@@ -66,7 +65,7 @@ class CalicoCharm(ops.CharmBase):
             ncp_deployed=False,
             deployed=False,
         )
-        self.calico_manifests = CalicoManifests(self, self.config, self.etcd, self.cni_options)
+        self.calico_manifests = CalicoManifests(self, self.config, self.etcd)
         self.collector = Collector(self.calico_manifests)
 
         self.framework.observe(self.on.install, self._on_install)
@@ -397,19 +396,21 @@ class CalicoCharm(ops.CharmBase):
     def _configure_cni(self):
         """Configure calico cni."""
         self.unit.status = MaintenanceStatus("Configuring Calico CNI.")
-        ip_versions = self._get_ip_versions()
-        ip6 = "autodetect" if 6 in ip_versions else "none"
-        self.cni_options.update(
-            {
-                "kubeconfig_path": "/opt/calicoctl/kubeconfig",
-                "mtu": self._get_mtu(),
-                "assign_ipv4": "true" if 4 in ip_versions else "false",
-                "assign_ipv6": "true" if 6 in ip_versions else "false",
-                "IP6": ip6,
-            }
-        )
+        self.calico_manifests.cni_config = self._get_cni_config()
         self._propagate_cni_config()
         self.stored.cni_configured = True
+
+    def _get_cni_config(self):
+        """Get the CNI config options."""
+        ip_versions = self._get_ip_versions()
+        ip6 = "autodetect" if 6 in ip_versions else "none"
+        return {
+            "kubeconfig_path": "/opt/calicoctl/kubeconfig",
+            "mtu": self._get_mtu(),
+            "assign_ipv4": "true" if 4 in ip_versions else "false",
+            "assign_ipv6": "true" if 6 in ip_versions else "false",
+            "IP6": ip6,
+        }
 
     def _disable_vxlan_tx_checksumming(self):
         if self.config["disable-vxlan-tx-checksumming"] and self.config["vxlan"] != "Never":
