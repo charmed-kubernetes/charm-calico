@@ -311,13 +311,14 @@ class CalicoManifests(Manifests):
         config: Returns the configuration mapped from the charm config and joined relations.
     """
 
-    def __init__(self, charm, charm_config, etcd: EtcdReactiveRequires):
+    def __init__(self, charm, charm_config, etcd: EtcdReactiveRequires, cni_config: dict):
         """Initialize an instance of CalicoManifests.
 
         Args:
             charm (CharmBase): The Calico charm object.
             charm_config (dict): The charm configuration.
             etcd (EtcdReactiveRequires): The Etcd relation object.
+            cni_config (dict): The CNI (Container Network Interface) configuration.
         """
         manipulations = [
             ConfigRegistry(self),
@@ -337,7 +338,7 @@ class CalicoManifests(Manifests):
         super().__init__("calico", charm.model, "upstream/calico", manipulations)
         self.charm_config = charm_config
         self.etcd = etcd
-        self.cni_config = {}
+        self.cni_config = cni_config
 
     @property
     def config(self) -> Dict:

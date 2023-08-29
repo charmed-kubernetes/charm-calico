@@ -56,6 +56,7 @@ class CalicoCharm(ops.CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
         self.etcd = EtcdReactiveRequires(self)
+        self.cni_config = {}
         self.stored.set_default(
             binaries_installed=False,
             calico_configured=False,
@@ -65,7 +66,7 @@ class CalicoCharm(ops.CharmBase):
             ncp_deployed=False,
             deployed=False,
         )
-        self.calico_manifests = CalicoManifests(self, self.config, self.etcd)
+        self.calico_manifests = CalicoManifests(self, self.config, self.etcd, self.cni_config)
         self.collector = Collector(self.calico_manifests)
 
         self.framework.observe(self.on.install, self._on_install)
@@ -87,6 +88,7 @@ class CalicoCharm(ops.CharmBase):
         self.unit.status = MaintenanceStatus("Updating etcd configuration.")
         if self.stored.deployed:
             try:
+                self._configure_cni()
                 self.calico_manifests.apply_manifests()
             except ManifestClientError:
                 log.exception("Failed to update etcd secrets.")
@@ -96,6 +98,7 @@ class CalicoCharm(ops.CharmBase):
         self.unit.status = MaintenanceStatus("Reconfiguring Calico.")
         if self.stored.deployed:
             try:
+                self._configure_cni()
                 self._configure_calico()
                 self.calico_manifests.apply_manifests()
                 self._set_status()
@@ -396,7 +399,7 @@ class CalicoCharm(ops.CharmBase):
     def _configure_cni(self):
         """Configure calico cni."""
         self.unit.status = MaintenanceStatus("Configuring Calico CNI.")
-        self.calico_manifests.cni_config = self._get_cni_config()
+        self.cni_config.update(self._get_cni_config())
         self._propagate_cni_config()
         self.stored.cni_configured = True
 

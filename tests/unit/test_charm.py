@@ -708,12 +708,12 @@ def test_configure_cni(
     ip_versions: Set,
     expected_config: dict,
 ):
-    charm.stored.cni_configure = False
+    charm.stored.cni_configured = False
     mock_get_ip.return_value = ip_versions
 
     charm._configure_cni()
 
-    assert charm.calico_manifests.cni_config == expected_config
+    assert charm.cni_config == expected_config
     assert charm.stored.cni_configured
     mock_mtu.assert_called_once()
     mock_propagate.assert_called_once()
