@@ -112,7 +112,7 @@ class PatchVethMtu(Patch):
             log.warning("calico-config: Unable to patch MTU value, data not found.")
             return
         mtu = self.manifests.config.get("mtu")
-        data.update({"veth_mtu": mtu if mtu else "0"})
+        data.update({"veth_mtu": str(mtu) if mtu else "0"})
 
 
 class PatchCalicoConflist(Patch):
