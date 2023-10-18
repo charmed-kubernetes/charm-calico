@@ -405,14 +405,24 @@ class CalicoCharm(ops.CharmBase):
 
     def _get_cni_config(self):
         """Get the CNI config options."""
+        binding = self.model.get_binding("cni")
+
+        ipv4_cidr = next(
+            (
+                iface.subnet
+                for iface in binding.network.interfaces
+                if not iface.name.startswith("fan-")
+            ),
+            None,
+        )
         ip_versions = self._get_ip_versions()
-        ip6 = "autodetect" if 6 in ip_versions else "none"
         return {
             "kubeconfig_path": "/opt/calicoctl/kubeconfig",
             "mtu": self._get_mtu(),
             "assign_ipv4": "true" if 4 in ip_versions else "false",
             "assign_ipv6": "true" if 6 in ip_versions else "false",
-            "IP6": ip6,
+            "IP6": "autodetect" if 6 in ip_versions else "none",
+            "ipv4_cidr": str(ipv4_cidr),
         }
 
     def _disable_vxlan_tx_checksumming(self):
