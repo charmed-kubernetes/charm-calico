@@ -681,7 +681,7 @@ def test_configure_bgp_peers_raises(
                 "assign_ipv4": "true",
                 "assign_ipv6": "true",
                 "IP6": "autodetect",
-                "ipv4_cidr": "10.0.0.0/16"
+                "ipv4_cidr": "10.0.0.0/16",
             },
             id="Dualstack",
         ),
@@ -693,7 +693,7 @@ def test_configure_bgp_peers_raises(
                 "assign_ipv4": "true",
                 "assign_ipv6": "false",
                 "IP6": "none",
-                "ipv4_cidr": "10.0.0.0/16"
+                "ipv4_cidr": "10.0.0.0/16",
             },
             id="Singlestack",
         ),
