@@ -407,13 +407,10 @@ class CalicoCharm(ops.CharmBase):
         """Get the CNI config options."""
         binding = self.model.get_binding("cni")
 
-        ipv4_cidr = next(
-            (
-                iface.subnet
-                for iface in binding.network.interfaces
-                if not iface.name.startswith("fan-")
-            ),
-            None,
+        ipv4_cidr, *_ = (
+            iface.subnet
+            for iface in binding.network.interfaces
+            if not iface.name.startswith("fan-")
         )
         ip_versions = self._get_ip_versions()
         return {
