@@ -12,6 +12,7 @@ ops.testing.SIMULATE_CAN_CONNECT = True
 def pytest_configure(config):
     markers = {
         "skip_install_calico_binaries": "mark tests which do not mock out _install_calico_binaries",
+        "skip_get_cni_config": "mark tests which do not mock out _get_cni_config",
     }
     for marker, description in markers.items():
         config.addinivalue_line("markers", f"{marker}: {description}")
@@ -30,12 +31,13 @@ def harness():
 def charm(request, harness: Harness[CalicoCharm]):
     """Create a charm with mocked methods.
 
-    This fixture utilizes ExitStack to dynamically mock methods in the Cilium Charm,
+    This fixture utilizes ExitStack to dynamically mock methods in the Calico Charm,
     using the request markers defined in the `pytest_configure` method.
     """
     with contextlib.ExitStack() as stack:
         methods_to_mock = {
             "_install_calico_binaries": "skip_install_calico_resources",
+            "_get_cni_config": "skip_get_cni_config",
         }
         for method, marker in methods_to_mock.items():
             if marker not in request.keywords:
