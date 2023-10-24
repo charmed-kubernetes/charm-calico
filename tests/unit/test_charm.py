@@ -681,6 +681,7 @@ def test_configure_bgp_peers_raises(
                 "assign_ipv4": "true",
                 "assign_ipv6": "true",
                 "IP6": "autodetect",
+                "ipv4_cidr": "10.0.0.0/16",
             },
             id="Dualstack",
         ),
@@ -692,6 +693,7 @@ def test_configure_bgp_peers_raises(
                 "assign_ipv4": "true",
                 "assign_ipv6": "false",
                 "IP6": "none",
+                "ipv4_cidr": "10.0.0.0/16",
             },
             id="Singlestack",
         ),
@@ -700,23 +702,31 @@ def test_configure_bgp_peers_raises(
 @mock.patch("charm.CalicoCharm._propagate_cni_config")
 @mock.patch("charm.CalicoCharm._get_ip_versions")
 @mock.patch("charm.CalicoCharm._get_mtu", return_value=1500)
+@pytest.mark.skip_get_cni_config
 def test_configure_cni(
     mock_mtu: mock.MagicMock,
     mock_get_ip: mock.MagicMock,
     mock_propagate: mock.MagicMock,
+    harness: Harness,
     charm: CalicoCharm,
     ip_versions: Set,
     expected_config: dict,
 ):
     charm.stored.cni_configured = False
     mock_get_ip.return_value = ip_versions
+    with mock.patch.object(charm.model, "get_binding") as mock_binding:
+        mock_interface = mock.MagicMock()
+        mock_interface.name = "mockIface"
+        mock_interface.subnet = "10.0.0.0/16"
+        mock_binding.network.interfaces = [mock_interface]
+        mock_binding.return_value = mock_binding
 
-    charm._configure_cni()
+        charm._configure_cni()
 
-    assert charm.cni_config == expected_config
-    assert charm.stored.cni_configured
-    mock_mtu.assert_called_once()
-    mock_propagate.assert_called_once()
+        assert charm.cni_config == expected_config
+        assert charm.stored.cni_configured
+        mock_mtu.assert_called_once()
+        mock_propagate.assert_called_once()
 
 
 @pytest.mark.parametrize(
