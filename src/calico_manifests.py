@@ -73,7 +73,9 @@ class PatchIPAutodetectionMethod(Patch):
         for container in containers:
             if container.name == "calico-node":
                 env = container.env
-                ipauto_env = EnvVar("IP_AUTODETECTION_METHOD", "skip-interface=lxd.*,fan.*")
+                ipauto_env = EnvVar(
+                    "IP_AUTODETECTION_METHOD", f"cidr={self.manifests.config.get('ipv4_cidr')}"
+                )
                 env.append(ipauto_env)
 
 
