@@ -1,4 +1,5 @@
 """This module provides the CalicoManifests class for managing Calico manifests."""
+
 import hashlib
 import json
 import logging
