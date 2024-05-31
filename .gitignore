@@ -9,3 +9,4 @@ __pycache__/
 .vscode/
 .kube/
 .python-version
+calico-*.tar.gz

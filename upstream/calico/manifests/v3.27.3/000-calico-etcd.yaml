@@ -29,6 +29,13 @@ metadata:
   name: calico-node
   namespace: kube-system
 ---
+# Source: calico/templates/calico-node.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: calico-cni-plugin
+  namespace: kube-system
+---
 # Source: calico/templates/calico-etcd-secrets.yaml
 # The following contains k8s Secrets for use with a TLS enabled etcd cluster.
 # For information on populating Secrets, see http://kubernetes.io/docs/user-guide/secrets/
@@ -153,7 +160,7 @@ rules:
     resources:
       - serviceaccounts/token
     resourceNames:
-      - calico-node
+      - calico-cni-plugin
     verbs:
       - create
   # The CNI plugin needs to get pods, nodes, and namespaces.
@@ -170,7 +177,7 @@ rules:
     resources:
       - endpointslices
     verbs:
-      - watch 
+      - watch
       - list
   - apiGroups: [""]
     resources:
@@ -192,6 +199,21 @@ rules:
     verbs:
       # Needed for clearing NodeNetworkUnavailable flag.
       - patch
+---
+# Source: calico/templates/calico-node-rbac.yaml
+# CNI cluster role
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: calico-cni-plugin
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - nodes
+      - namespaces
+    verbs:
+      - get
 ---
 # Source: calico/templates/calico-kube-controllers-rbac.yaml
 kind: ClusterRoleBinding
@@ -219,6 +241,20 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: calico-node
+  namespace: kube-system
+---
+# Source: calico/templates/calico-node-rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: calico-cni-plugin
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: calico-cni-plugin
+subjects:
+- kind: ServiceAccount
+  name: calico-cni-plugin
   namespace: kube-system
 ---
 # Source: calico/templates/calico-node.yaml
@@ -266,7 +302,7 @@ spec:
         # This container installs the CNI binaries
         # and CNI network config file on each node.
         - name: install-cni
-          image: docker.io/calico/cni:v3.25.1
+          image: docker.io/calico/cni:v3.27.3
           imagePullPolicy: IfNotPresent
           command: ["/opt/cni/bin/install"]
           envFrom:
@@ -312,7 +348,7 @@ spec:
         # i.e. bpf at /sys/fs/bpf and cgroup2 at /run/calico/cgroup. Calico-node initialisation is executed
         # in best effort fashion, i.e. no failure for errors, to not disrupt pod creation in iptable mode.
         - name: "mount-bpffs"
-          image: docker.io/calico/node:v3.25.1
+          image: docker.io/calico/node:v3.27.3
           imagePullPolicy: IfNotPresent
           command: ["calico-node", "-init", "-best-effort"]
           volumeMounts:
@@ -338,7 +374,7 @@ spec:
         # container programs network policy and routes on each
         # host.
         - name: calico-node
-          image: docker.io/calico/node:v3.25.1
+          image: docker.io/calico/node:v3.27.3
           imagePullPolicy: IfNotPresent
           envFrom:
           - configMapRef:
@@ -578,7 +614,7 @@ spec:
       hostNetwork: true
       containers:
         - name: calico-kube-controllers
-          image: docker.io/calico/kube-controllers:v3.25.1
+          image: docker.io/calico/kube-controllers:v3.27.3
           imagePullPolicy: IfNotPresent
           env:
             # The location of the etcd cluster.
