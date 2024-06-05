@@ -5,6 +5,7 @@ import shlex
 import time
 from pathlib import Path
 
+import juju.application
 import pytest
 import yaml
 
@@ -108,7 +109,6 @@ async def test_bgp_service_ip_advertisement(ops_test, kubernetes):
     service_ip = kubernetes.read_object(service).spec.cluster_ip
 
     # deploy bird charm
-    await ops_test.model.deploy(entity_url="bird", channel="stable", num_units=1)
     await ops_test.model.block_until(lambda: "bird" in ops_test.model.applications, timeout=60)
     await ops_test.model.wait_for_idle(status="active", timeout=60 * 10)
 
@@ -156,32 +156,37 @@ async def test_bgp_service_ip_advertisement(ops_test, kubernetes):
 
     # clean up
     await calico_app.set_config({"bgp-service-cluster-ips": "", "global-bgp-peers": "[]"})
-    await bird_app.destroy()
 
 
-async def test_rp_filter_conflict(ops_test):
-    unit_number = 0
-    await ops_test.juju(
-        "ssh",
-        f"calico/{unit_number}",
-        "sudo sysctl -w net.ipv4.conf.all.rp_filter=2",
-        check=True,
-        fail_msg="Failed to set rp_filter",
-    )
+async def get_leader(app: juju.application.Application):
+    """Find leader unit of an application."""
+    is_leader = await asyncio.gather(*(u.is_leader_from_status() for u in app.units))
+    for idx, flag in enumerate(is_leader):
+        if flag:
+            return idx
 
+
+@pytest.fixture()
+async def ignore_loose_rp_filter(ops_test):
+    calico_app: juju.application.Application = ops_test.model.applications["calico"]
+    calico_leader = await get_leader(calico_app)
+    cmd = "sysctl -w net.ipv4.conf.all.rp_filter={v}"
+    try:
+        await juju_run(calico_app.units[calico_leader], cmd.format(v=2))
+        # false is default, change it to true and back to false to trigger config changed
+        await calico_app.set_config({"ignore-loose-rpf": "true"})
+        await calico_app.set_config({"ignore-loose-rpf": "false"})
+        yield calico_leader
+    finally:
+        await juju_run(calico_app.units[calico_leader], cmd.format(v=1))
+        await calico_app.set_config({"ignore-loose-rpf": "true"})
+        await calico_app.set_config({"ignore-loose-rpf": "false"})
+        await ops_test.model.wait_for_idle(status="active", timeout=60 * 5)
+
+
+async def test_rp_filter_conflict(ops_test, ignore_loose_rp_filter):
+    unit_number = ignore_loose_rp_filter
     calico_app = ops_test.model.applications["calico"]
-    # false is default, change it to true and back to false to trigger config changed
-    await calico_app.set_config(
-        {
-            "ignore-loose-rpf": "true",
-        }
-    )
-    await calico_app.set_config(
-        {
-            "ignore-loose-rpf": "false",
-        }
-    )
-
     unit = calico_app.units[unit_number]
 
     def blocked():

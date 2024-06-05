@@ -13,3 +13,7 @@ applications:
     options:
       ignore-loose-rpf: true
       vxlan: Always
+  bird:
+    channel: latest/stable
+    charm: bird
+    num_units: 1
