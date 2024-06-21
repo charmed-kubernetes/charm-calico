@@ -625,14 +625,15 @@ class CalicoCharm(ops.CharmBase):
         @param int timeout: If the process does not terminate after timeout seconds,
                             raise a TimeoutExpired exception
         """
-        cmd = ["/opt/calicoctl/calicoctl"] + list(args)
+        cmd = ["/opt/calicoctl/calicoctl", "--log-level=debug"] + list(args)
         env = os.environ.copy()
         env.update(self._get_calicoctl_env())
         try:
             return subprocess.check_output(cmd, env=env, stderr=subprocess.PIPE, timeout=timeout)
         except (CalledProcessError, TimeoutExpired) as e:
-            log.error(e.stderr)
-            log.error(e.output)
+            log.error("env=%s", env)
+            log.error("out=%s", e.stdout.decode())
+            log.error("err=%s", e.stderr.decode())
             raise
 
     def _calicoctl_get(self, *args):
