@@ -1,17 +1,23 @@
 """This module provides the CalicoManifests class for managing Calico manifests."""
 
+import datetime
 import hashlib
 import json
 import logging
 from base64 import b64encode
-from typing import Dict, List
+from typing import Dict, FrozenSet, Iterable, List, Optional
 
 from charms.kubernetes_libs.v0.etcd import EtcdReactiveRequires
 from lightkube.codecs import AnyResource
+from lightkube.core.client import Client
 from lightkube.models.core_v1 import Container, EnvVar
-from ops.manifests import ConfigRegistry, ManifestLabel, Manifests, Patch
+from lightkube.resources.apps_v1 import DaemonSet
+from lightkube.resources.core_v1 import Event, Pod
+from ops.manifests import ConfigRegistry, HashableResource, ManifestLabel, Manifests, Patch
+from ops.manifests.manipulations import AnyCondition
 
 log = logging.getLogger(__name__)
+MANIFEST_LABEL = "k8s-app"
 
 
 class PatchCDKOnCAChange(Patch):
@@ -375,3 +381,62 @@ class CalicoManifests(Manifests):
         hash = hashlib.sha256()
         hash.update(json_str.encode())
         return hash.hexdigest()
+
+    def status(self) -> FrozenSet[HashableResource]:
+        """Return all installed objects which have a `.status.conditions` attribute.
+
+        Bonus: Log events for daemonsets with unready pods.
+        """
+        installed = self.installed_resources()
+        for obj in installed:
+            if obj.kind == "DaemonSet":
+                ds: DaemonSet = obj.resource
+                if ds.status.numberReady != ds.status.desiredNumberScheduled:
+                    log_events(collect_events(self.client, obj.resource))
+        return frozenset(_ for _ in installed if _.status_conditions)
+
+    def is_ready(self, obj: HashableResource, cond: AnyCondition) -> Optional[bool]:
+        """Determine if the resource is ready."""
+        if not (ready := super().is_ready(obj, cond)):
+            log_events(collect_events(self.client, obj.resource))
+        return ready
+
+
+def by_localtime(event: Event) -> datetime.datetime:
+    """Return the last timestamp of the event in local time."""
+    dt = event.lastTimestamp or datetime.datetime.now(datetime.timezone.utc)
+    return dt.astimezone()
+
+
+def log_events(events: Iterable[Event]) -> None:
+    """Log the events."""
+    for event in sorted(events, key=by_localtime):
+        log.info(
+            "Event %s/%s %s msg=%s",
+            event.involvedObject.kind,
+            event.involvedObject.name,
+            event.lastTimestamp and event.lastTimestamp.astimezone() or "Date not recorded",
+            event.message,
+        )
+
+
+def collect_events(client: Client, resource: AnyResource) -> List[Event]:
+    """Collect events from the resource."""
+    kind: str = resource.kind or type(resource).__name__
+    meta = resource.metadata
+    object_events = list(
+        client.list(
+            Event,
+            namespace=meta.namespace,
+            fields={
+                "involvedObject.kind": kind,
+                "involvedObject.name": meta.name,
+            },
+        )
+    )
+    if kind in ["Deployment", "DaemonSet"]:
+        involved_pods = client.list(
+            Pod, namespace=meta.namespace, labels={MANIFEST_LABEL: meta.name}
+        )
+        object_events += [event for pod in involved_pods for event in collect_events(client, pod)]
+    return object_events

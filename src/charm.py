@@ -197,7 +197,13 @@ class CalicoCharm(ops.CharmBase):
                 "ignore-loose-rpf config is in conflict with rp_filter value"
             )
             return
-        if self.stored.deployed and self.stored.calico_configured:
+
+        if not self.stored.deployed:
+            return
+
+        if unready := self.collector.unready:
+            self.unit.status = WaitingStatus(", ".join(unready))
+        elif self.stored.calico_configured:
             self.unit.set_workload_version(self.collector.short_version)
             self.unit.status = ActiveStatus("Ready")
 
