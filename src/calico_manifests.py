@@ -403,7 +403,7 @@ class CalicoManifests(Manifests):
 
 
 def by_localtime(event: Event) -> datetime.datetime:
-    """Return the last timestamp of the event in local time."""
+    """Return the last timestamp of the event if available in local time, otherwise approximate with now."""
     dt = event.lastTimestamp or datetime.datetime.now(datetime.timezone.utc)
     return dt.astimezone()
 
