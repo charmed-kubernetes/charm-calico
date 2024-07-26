@@ -1,5 +1,5 @@
 description: A minimal two-machine Kubernetes cluster, appropriate for development.
-series: &series {{ series }}
+default-base: &default-base {{ base }}
 applications:
   kubernetes-control-plane:
     options:
