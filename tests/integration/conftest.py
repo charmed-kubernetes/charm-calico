@@ -11,10 +11,10 @@ log = logging.getLogger(__name__)
 
 def pytest_addoption(parser):
     parser.addoption(
-        "--series",
+        "--default-base",
         type=str,
         default="",
-        help="Set series for the machine units",
+        help="Set default-base for the machine units",
     )
 
 
@@ -31,9 +31,9 @@ async def k8s_core_yaml(ops_test, k8s_core_bundle):
 
 
 @pytest.fixture(scope="module")
-def series(k8s_core_yaml, request):
-    series = request.config.getoption("--series")
-    return series if series else k8s_core_yaml["series"]
+def base(k8s_core_yaml, request):
+    base = request.config.getoption("--default-base")
+    return base if base else k8s_core_yaml["default-base"]
 
 
 @pytest.fixture(scope="module")
