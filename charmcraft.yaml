@@ -1,4 +1,38 @@
 type: charm
+name: calico
+summary: A robust Software Defined Network from Project Calico
+description: |
+  Deploys Calico as a background service and configures CNI for use with
+  calico on any principal charm that implements the kubernetes-cni interface.
+links:
+  contact:
+    - Kevin Monroe <kevin.monroe@canonical.com>
+    - Adam Dyess <adam.dyess@canonical.com>
+    - Mateo Florido <mateo.florido@canonical.com>
+  documentation: https://discourse.charmhub.io/t/calico-docs-index/6167
+  source: https://github.com/charmed-kubernetes/layer-calico
+  issues:
+    - https://bugs.launchpad.net/charm-calico/
+
+subordinate: true
+
+requires:
+  etcd:
+    interface: etcd
+  cni:
+    interface: kubernetes-cni
+    scope: container
+resources:
+  calico:
+    type: file
+    filename: calico.tar.gz
+    description: 'Calico resource tarball for amd64'
+  calico-arm64:
+    type: file
+    filename: calico.tar.gz
+    description: 'Calico resource tarball for arm64'
+
+
 parts:
   charm:
     build-packages: [git]
@@ -12,6 +46,9 @@ bases:
       channel: "20.04"
       architectures: [amd64]
     run-on:
+    - name: ubuntu
+      channel: "24.04"
+      architectures: [amd64, arm64]
     - name: ubuntu
       channel: "22.04"
       architectures: [amd64, arm64]
