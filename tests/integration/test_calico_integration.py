@@ -14,7 +14,7 @@ log = logging.getLogger(__name__)
 
 @pytest.mark.abort_on_fail
 @pytest.mark.skip_if_deployed
-async def test_build_and_deploy(ops_test, k8s_core_bundle, series):
+async def test_build_and_deploy(ops_test, k8s_core_bundle, base):
     log.info("Building charm")
     calico_charm = await ops_test.build_charm(".")
 
@@ -34,7 +34,7 @@ async def test_build_and_deploy(ops_test, k8s_core_bundle, series):
         k8s_core_bundle,
         Path("tests/data/charm.yaml"),
         calico_charm=calico_charm,
-        series=series,
+        base=base,
         resource_path=resource_path,
     )
 
