@@ -8,8 +8,10 @@ from base64 import b64encode
 from typing import Dict, FrozenSet, Iterable, List, Optional
 
 from charms.kubernetes_libs.v0.etcd import EtcdReactiveRequires
+from httpx import HTTPError
 from lightkube.codecs import AnyResource
 from lightkube.core.client import Client
+from lightkube.core.exceptions import ApiError
 from lightkube.models.core_v1 import Container, EnvVar
 from lightkube.resources.apps_v1 import DaemonSet
 from lightkube.resources.core_v1 import Event, Pod
@@ -424,16 +426,21 @@ def collect_events(client: Client, resource: AnyResource) -> List[Event]:
     """Collect events from the resource."""
     kind: str = resource.kind or type(resource).__name__
     meta = resource.metadata
-    object_events = list(
-        client.list(
-            Event,
-            namespace=meta.namespace,
-            fields={
-                "involvedObject.kind": kind,
-                "involvedObject.name": meta.name,
-            },
+    try:
+        object_events = list(
+            client.list(
+                Event,
+                namespace=meta.namespace,
+                fields={
+                    "involvedObject.kind": kind,
+                    "involvedObject.name": meta.name,
+                },
+            )
         )
-    )
+    except (ApiError, HTTPError):
+        log.warning(f"API error fetching events for {kind}/{meta.name}")
+        return []
+
     if kind in ["Deployment", "DaemonSet"]:
         involved_pods = client.list(
             Pod, namespace=meta.namespace, labels={MANIFEST_LABEL: meta.name}
