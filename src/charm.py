@@ -17,13 +17,14 @@ from typing import Set
 
 import ops
 import yaml
-from calico_manifests import CalicoManifests
 from charms.kubernetes_libs.v0.etcd import EtcdReactiveRequires
 from charms.operator_libs_linux.v1.systemd import daemon_reload, service_running, service_stop
 from conctl import getContainerRuntimeCtl
 from ops.framework import StoredState
 from ops.manifests import Collector, ManifestClientError
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, ModelError, WaitingStatus
+
+from calico_manifests import CalicoManifests
 
 log = logging.getLogger(__name__)
 
