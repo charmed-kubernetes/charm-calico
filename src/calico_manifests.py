@@ -437,13 +437,14 @@ def collect_events(client: Client, resource: AnyResource) -> List[Event]:
                 },
             )
         )
+        if kind in ["Deployment", "DaemonSet"]:
+            involved_pods = client.list(
+                Pod, namespace=meta.namespace, labels={MANIFEST_LABEL: meta.name}
+            )
+            object_events += [
+                event for pod in involved_pods for event in collect_events(client, pod)
+            ]
+        return object_events
     except (ApiError, HTTPError):
         log.warning(f"API error fetching events for {kind}/{meta.name}")
         return []
-
-    if kind in ["Deployment", "DaemonSet"]:
-        involved_pods = client.list(
-            Pod, namespace=meta.namespace, labels={MANIFEST_LABEL: meta.name}
-        )
-        object_events += [event for pod in involved_pods for event in collect_events(client, pod)]
-    return object_events
