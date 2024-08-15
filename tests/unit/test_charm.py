@@ -16,11 +16,12 @@ from typing import Optional, Set
 import ops
 import ops.testing
 import pytest
-from charm import CalicoCharm
 from ops.manifests import ManifestClientError
 from ops.model import ActiveStatus, BlockedStatus, ModelError, WaitingStatus
 from ops.testing import Harness
 from yaml import YAMLError
+
+from charm import CalicoCharm
 
 ops.testing.SIMULATE_CAN_CONNECT = True
 
