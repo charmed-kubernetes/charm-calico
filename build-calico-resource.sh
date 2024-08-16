@@ -10,7 +10,7 @@ set -eux
 
 # Supported calico architectures
 arches="amd64 arm64"
-calico_version="v3.27.3"
+calico_version="v3.27.4"
 
 function fetch_and_validate() {
   # fetch a binary and make sure it's what we expect (executable > 20MB)
@@ -47,16 +47,13 @@ function fetch_and_validate() {
   fi
 }
 
-wget \
-  https://github.com/projectcalico/calico/releases/download/$calico_version/release-$calico_version.tgz
-tar -xf release-$calico_version.tgz
-
 for arch in ${arches}; do
   rm -rf resource-build-$arch
   mkdir resource-build-$arch
   pushd resource-build-$arch
-  cp ../release-$calico_version/bin/calicoctl/calicoctl-linux-$arch calicoctl
-
+  fetch_and_validate \
+    https://github.com/projectcalico/calico/releases/download/$calico_version/calicoctl-linux-$arch
+  mv calicoctl-linux-$arch calicoctl
   tar -zcvf ../calico-$arch.tar.gz .
 
   popd

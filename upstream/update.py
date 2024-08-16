@@ -26,6 +26,7 @@ logging.basicConfig(level=logging.INFO)
 GH_REPO = "https://github.com/{repo}"
 GH_TAGS = "https://api.github.com/repos/{repo}/tags"
 GH_RAW = "https://raw.githubusercontent.com/{repo}/{rel}/{path}/{manifest}"
+ROCKS_CC = "upload.rocks.canonical.com:5000/cdk"
 
 SOURCES = dict(
     calico=dict(
@@ -53,19 +54,42 @@ IMG_RE = re.compile(r"^\s+image:\s+(\S+)")
 class Registry:
     """Object to define how to contact a Registry."""
 
-    name: str
-    path: str
-    user: str
-    pass_file: str
+    base: str
+    user_pass: Optional[str] = None
 
     @property
-    def creds(self) -> "SyncCreds":
+    def name(self) -> str:
+        name, *_ = self.base.split("/")
+        return name
+
+    @property
+    def path(self) -> List[str]:
+        _, *path = self.base.split("/")
+        return path
+
+    @property
+    def user(self) -> str:
+        user, _ = self.user_pass.split(":", 1)
+        return user
+
+    @property
+    def password(self) -> str:
+        _, pw = self.user_pass.split(":", 1)
+        return pw
+
+    @property
+    def creds(self) -> List["SyncCreds"]:
         """Get credentials as a SyncCreds Dict."""
-        return {
-            "registry": self.name,
-            "user": self.user,
-            "pass": Path(self.pass_file).read_text().strip(),
-        }
+        creds = []
+        if self.user_pass:
+            creds.append(
+                {
+                    "registry": self.name,
+                    "user": self.user,
+                    "pass": self.password,
+                }
+            )
+        return creds
 
 
 @dataclass
@@ -103,12 +127,13 @@ class SyncConfig(TypedDict):
 
 def sync_asset(image: str, registry: Registry):
     """Factory for generating SyncAssets."""
-    _, tag = image.split("/", 1)
-    dest = f"{registry.name}/{registry.path.strip('/')}/{tag}"
+    _, *name_tag = image.split("/")
+    full_path = "/".join(registry.path + name_tag)
+    dest = f"{registry.name}/{full_path}"
     return SyncAsset(source=image, target=dest, type="image")
 
 
-def main(source: str, registry: Optional[Registry]):
+def main(source: str, registry: Registry, check: bool, debug: bool):
     """Main update logic."""
     local_releases = gather_current(source)
     gh_releases = gather_releases(source)
@@ -117,8 +142,7 @@ def main(source: str, registry: Optional[Registry]):
         local_releases.add(download(source, release))
     unique_releases = list(dict.fromkeys(accumulate((sorted(local_releases)), dedupe)))
     all_images = set(image for release in unique_releases for image in images(release))
-    if registry:
-        mirror_image(all_images, registry)
+    mirror_image(all_images, registry, check, debug)
     return unique_releases[-1].name, all_images
 
 
@@ -228,17 +252,20 @@ def images(release: Release) -> Generator[str, None, None]:
                     yield m.groups()[0]
 
 
-def mirror_image(images: List[str], registry: Registry):
+def mirror_image(images: List[str], registry: Registry, check: bool, debug: bool):
     """Synchronize all source images to target registry, only pushing changed layers."""
     sync_config = SyncConfig(
         version=1,
-        creds=[registry.creds],
+        creds=registry.creds,
         sync=[sync_asset(image, registry) for image in images],
     )
     with NamedTemporaryFile(mode="w") as tmpfile:
         yaml.safe_dump(sync_config, tmpfile)
+        command = "check" if check else "once"
+        args = ["regsync", "-c", tmpfile.name, command]
+        args += ["-v", "debug"] if debug else []
         proc = subprocess.Popen(
-            ["./regsync", "once", "-c", tmpfile.name, "-v", "debug"],
+            args,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             encoding="utf-8",
@@ -257,16 +284,30 @@ def get_argparser():
     )
     parser.add_argument(
         "--registry",
-        default=None,
+        default=ROCKS_CC,
         type=str,
-        nargs=4,
         help="Registry to which images should be mirrored.\n\n"
         "example\n"
-        "  --registry my.registry:5000 path username password-file\n"
-        "\n"
-        "Mirroring depends on binary regsync "
-        "(https://github.com/regclient/regclient/releases)\n"
-        "and that it is available in the current working directory",
+        "  --registry my.registry:5000/path\n"
+        "\n",
+    )
+    parser.add_argument(
+        "--user_pass",
+        default=None,
+        type=str,
+        help="Username and password for the registry separated by a colon\n\n"
+        "if missing, regsync will attempt to use authfrom ${HOME}/.docker/config.json\n"
+        "example\n"
+        "  --user-pass myuser:mypassword\n"
+        "\n",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="If selected, will not run the sync\n" "but instead checks if a sync is necessary",
+    )
+    parser.add_argument(
+        "--debug", action="store_true", help="If selected, regsync debug will appear"
     )
     parser.add_argument(
         "--sources",
@@ -289,10 +330,10 @@ class UpdateError(Exception):
 if __name__ == "__main__":
     try:
         args = get_argparser().parse_args()
-        registry = Registry(*args.registry) if args.registry else None
+        registry = Registry(args.registry, args.user_pass)
         image_set = set()
         for source in args.sources:
-            version, source_images = main(source, registry)
+            version, source_images = main(source, registry, args.check, args.debug)
             Path(FILEDIR, source, "version").write_text(f"{version}\n")
             print(f"source: {source} latest={version}")
             image_set |= source_images
