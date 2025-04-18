@@ -134,9 +134,10 @@ def test_install_or_upgrade(
     mock_set_status: mock.MagicMock,
     charm: CalicoCharm,
 ):
-    with mock.patch.object(charm, "etcd") as mock_etcd, mock.patch.object(
-        charm.calico_manifests, "apply_manifests"
-    ) as mock_apply:
+    with (
+        mock.patch.object(charm, "etcd") as mock_etcd,
+        mock.patch.object(charm.calico_manifests, "apply_manifests") as mock_apply,
+    ):
         mock_etcd.return_value.is_ready.return_value = True
         mock_event = mock.MagicMock()
         charm._install_or_upgrade(mock_event)
@@ -158,8 +159,9 @@ def test_install_or_upgrade_etcd_unavailable(
     mock_set_status: mock.MagicMock,
     charm: CalicoCharm,
 ):
-    with mock.patch.object(charm, "etcd") as mock_etcd, mock.patch.object(
-        charm.calico_manifests, "apply_manifests"
+    with (
+        mock.patch.object(charm, "etcd") as mock_etcd,
+        mock.patch.object(charm.calico_manifests, "apply_manifests"),
     ):
         mock_etcd.is_ready = False
         mock_event = mock.MagicMock()
@@ -180,8 +182,9 @@ def test_install_or_upgrade_config(
     mock_set_status: mock.MagicMock,
     charm: CalicoCharm,
 ):
-    with mock.patch.object(charm, "etcd") as mock_etcd, mock.patch.object(
-        charm.calico_manifests, "apply_manifests"
+    with (
+        mock.patch.object(charm, "etcd") as mock_etcd,
+        mock.patch.object(charm.calico_manifests, "apply_manifests"),
     ):
         mock_etcd.return_value.is_ready.return_value = True
         mock_event = mock.MagicMock()
@@ -222,8 +225,9 @@ def test_install_or_upgrade_exception(
     side_effect: Exception,
     status,
 ):
-    with mock.patch.object(charm, "etcd") as mock_etcd, mock.patch.object(
-        charm.calico_manifests, "apply_manifests"
+    with (
+        mock.patch.object(charm, "etcd") as mock_etcd,
+        mock.patch.object(charm.calico_manifests, "apply_manifests"),
     ):
         mock_etcd.return_value.is_ready.return_value = True
         mock_event = mock.MagicMock()

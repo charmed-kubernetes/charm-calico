@@ -30,7 +30,8 @@ def harness():
 
 @pytest.fixture
 def charm(request, harness: Harness[CalicoCharm]):
-    """Create a charm with mocked methods.
+    """
+    Create a charm with mocked methods.
 
     This fixture utilizes ExitStack to dynamically mock methods in the Calico Charm,
     using the request markers defined in the `pytest_configure` method.
