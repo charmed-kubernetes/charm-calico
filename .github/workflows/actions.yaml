@@ -16,7 +16,7 @@ jobs:
     name: Lint Unit
     uses: charmed-kubernetes/workflows/.github/workflows/lint-unit.yaml@main
     with:
-      python: "['3.8', '3.10', '3.12']"
+      python: "['3.10', '3.12']"
     needs: 
       - call-inclusive-naming-check
 
@@ -35,7 +35,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: 3.10
+          python-version: "3.10"
       - name: Setup operator environment
         uses: charmed-kubernetes/actions-operator@main
         with:
