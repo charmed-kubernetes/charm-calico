@@ -3,8 +3,9 @@ import unittest.mock as mock
 
 import ops.testing
 import pytest
-from charm import CalicoCharm
 from ops.testing import Harness
+
+from charm import CalicoCharm
 
 ops.testing.SIMULATE_CAN_CONNECT = True
 
