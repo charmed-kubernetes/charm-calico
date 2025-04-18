@@ -43,7 +43,7 @@ parts:
 bases:
   - build-on:
     - name: ubuntu
-      channel: "20.04"
+      channel: "22.04"
       architectures: [amd64]
     run-on:
     - name: ubuntu
@@ -51,7 +51,4 @@ bases:
       architectures: [amd64, arm64]
     - name: ubuntu
       channel: "22.04"
-      architectures: [amd64, arm64]
-    - name: ubuntu
-      channel: "20.04"
       architectures: [amd64, arm64]
