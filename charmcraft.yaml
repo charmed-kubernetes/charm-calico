@@ -1,20 +1,267 @@
 type: charm
+name: calico
+summary: A robust Software Defined Network from Project Calico
+description: |
+  Deploys Calico as a background service and configures CNI for use with
+  calico on any principal charm that implements the kubernetes-cni interface.
+links:
+  contact:
+    - Kevin Monroe <kevin.monroe@canonical.com>
+    - Adam Dyess <adam.dyess@canonical.com>
+    - Mateo Florido <mateo.florido@canonical.com>
+  documentation: https://discourse.charmhub.io/t/calico-docs-index/6167
+  source: https://github.com/charmed-kubernetes/layer-calico
+  issues:
+    - https://bugs.launchpad.net/charm-calico/
+
+subordinate: true
+
+config:
+  options:
+    bgp-service-cluster-ips:
+      type: string
+      description: |
+        Space-separated list of service cluster CIDRs to advertise over BGP.
+        These will be passed to the .spec.serviceClusterIPs field of the default
+        BGPConfiguration in Calico.
+
+        Example value: ”10.0.0.0/24 10.0.1.0/24”
+      default: ""
+    bgp-service-external-ips:
+      type: string
+      description: |
+        Space-separated list of service external CIDRs to advertise over BGP.
+        These will be passed to the .spec.serviceExternalIPs field of the default
+        BGPConfiguration in Calico.
+
+        Example value: ”10.0.0.0/24 10.0.1.0/24”
+      default: ""
+    bgp-service-loadbalancer-ips:
+      type: string
+      description: |
+        Space-separated list of service load-balancer CIDRs to advertise over BGP.
+        These will be passed to the .spec.serviceLoadBalancerIPs field of the default
+        BGPConfiguration in Calico.
+
+        Example value: ”10.0.0.0/24 10.0.1.0/24”
+      default: ""
+    ipip:
+      type: string
+      default: Never
+      description: |
+        IPIP encapsulation mode. Must be one of "Always", "CrossSubnet", or "Never".
+        This is incompatible with VXLAN encapsulation. If VXLAN encapsulation is
+        enabled, then this must be set to "Never".
+    image-registry:
+      default: rocks.canonical.com:443/cdk
+      type: string
+      description: |
+        Source registry of Calico images.
+        By setting to a value, each image listed in the releases manifest
+        has its image-registry replaced.
+    vxlan:
+      type: string
+      default: Never
+      description: |
+        VXLAN encapsulation mode. Must be one of "Always", "CrossSubnet", or "Never".
+        This is incompatible with IPIP encapsulation. If IPIP encapsulation is
+        enabled, then this must be set to "Never".
+    veth-mtu:
+      type: int
+      default:
+      description: |
+        Set veth MTU size. This should be set to the MTU size of the base network.
+
+        If VXLAN is enabled, then the charm will automatically subtract 50 from the
+        specified MTU size.
+
+        If IPIP is enabled, then the charm will automatically subtract 20 from the
+        specified MTU size.
+    nat-outgoing:
+      type: boolean
+      default: true
+      description: |
+        NAT outgoing traffic
+    cidr:
+      type: string
+      default: "192.168.0.0/16"
+      description: |
+        Network CIDR assigned to Calico. This is applied to the default Calico
+        pool, and is also communicated to the Kubernetes charms for use in
+        kube-proxy configuration.
+
+        Calico assigns IP addresses to Kubernetes nodes in blocks of 64 addresses.
+        It is recommended to make the Calico network large enough to assign at
+        least one 64 address block to each kubernetes-control-plane and
+        kubernetes-worker unit.
+    manage-pools:
+      type: boolean
+      default: true
+      description: |
+        If true, a default pool is created using the cidr and ipip charm
+        configuration values.
+
+        Warning: When manage-pools is enabled, the charm will delete any pools
+        that are unrecognized.
+    global-as-number:
+      type: int
+      default: 64512
+      description: |
+        Global AS number.
+    subnet-as-numbers:
+      type: string
+      default: "{}"
+      description: |
+        Mapping of subnets to AS numbers, specified as YAML. Each Calico node
+        will be assigned an AS number based on the entries in this mapping.
+
+        Example value: "{10.0.0.0/24: 64512, 10.0.1.0/24: 64513}"
+
+        If a node's IP matches any of the specified subnets, then the
+        corresponding AS number is used instead of the global one.
+
+        If a node's IP matches no subnets, then the global AS number will be
+        used instead.
+
+        If a node's IP matches multiple subnets, then the most specific subnet
+        will be used, e.g. a /24 subnet will take precedence over a /16.
+    unit-as-numbers:
+      type: string
+      default: "{}"
+      description: |
+        Mapping of unit IDs to AS numbers, specified as YAML. Each Calico node
+        will be assigned an AS number based on the entries in this mapping.
+
+        Example value: "{0: 64512, 1: 64513}"
+
+        This takes precedence over global-as-number and subnet-as-numbers.
+    node-to-node-mesh:
+      type: boolean
+      default: true
+      description: |
+        When enabled, each Calico node will peer with every other Calico node in
+        the cluster.
+    global-bgp-peers:
+      type: string
+      default: "[]"
+      description: |
+        List of global BGP peers. Each BGP peer is specified with an address and
+        an as-number.
+
+        Example value: "[{address: 10.0.0.1, as-number: 65000}, {address: 10.0.0.2, as-number: 65001}]"
+    subnet-bgp-peers:
+      type: string
+      default: "{}"
+      description: |
+        Mapping of subnets to lists of BGP peers. Each BGP peer is specified with
+        an address and an as-number.
+
+        Example value: "{10.0.0.0/24: [{address: 10.0.0.1, as-number: 65000}, {address: 10.0.0.2, as-number: 65001}], 10.0.1.0/24: [{address: 10.0.1.1, as-number: 65002}]}"
+
+        If a node's IP matches multiple subnets, then peerings will be added for
+        each matched subnet.
+    unit-bgp-peers:
+      type: string
+      default: "{}"
+      description: |
+        Mapping of unit IDs to lists of BGP peers. Each BGP peer is specified
+        with an address and an as-number.
+
+        Example value: "{0: [{address: 10.0.0.1, as-number: 65000}, {address: 10.0.0.2, as-number: 65001}], 1: [{address: 10.0.1.1, as-number: 65002}]}"
+    route-reflector-cluster-ids:
+      type: string
+      default: "{}"
+      description: |
+        Mapping of unit IDs to route reflector cluster IDs. Assigning a route
+        reflector cluster ID allows the node to function as a route reflector.
+
+        Example value: "{0: 224.0.0.1, 2: 224.0.0.1}"
+    ignore-loose-rpf:
+      type: boolean
+      default: false
+      description: |
+        Enable or disable IgnoreLooseRPF for Calico Felix.  This is only used
+        when rp_filter is set to a value of 2.
+    disable-vxlan-tx-checksumming:
+      type: boolean
+      default: true
+      description: |
+        When set to true, if VXLAN encapsulation is in use, then the charm will
+        disable TX checksumming on the vxlan.calico network interface. This works
+        around an upstream issue in Calico:
+        https://github.com/projectcalico/calico/issues/3145
+    release:
+      description: Version of Calico to deploy
+      type: string
+
+actions:
+  list-versions:
+    description: List Calico Versions supported by this charm
+  list-resources:
+    description: List  Provider and Storage Resources of configured version
+    params:
+      resources:
+        type: string
+        default: ""
+        description: |
+          Space separated list of kubernetes resource types to filter list result
+  scrub-resources:
+    description: Remove deployments other than the current one
+    params:
+      resources:
+        type: string
+        default: ""
+        description: |
+          Space separated list of kubernetes resource types to filter scrubbing   
+  sync-resources:
+    description: |
+      Add kubernetes resources which should be created by this charm which aren't
+      present within the cluster.
+    params:
+      resources:
+        type: string
+        default: ""
+        description: |
+          Space separated list of kubernetes resource types
+          to use a filter during the sync. This helps limit
+          which missing resources are applied.
+
+requires:
+  etcd:
+    interface: etcd
+  cni:
+    interface: kubernetes-cni
+    scope: container
+
+resources:
+  calico:
+    type: file
+    filename: calico.tar.gz
+    description: 'Calico resource tarball for amd64'
+  calico-arm64:
+    type: file
+    filename: calico.tar.gz
+    description: 'Calico resource tarball for arm64'
+
 parts:
   charm:
+    plugin: charm
+    source: .
     build-packages: [git]
     charm-python-packages: [setuptools]
     prime:
       - upstream/**
       - scripts/**
+
 bases:
   - build-on:
     - name: ubuntu
-      channel: "20.04"
+      channel: "22.04"
       architectures: [amd64]
     run-on:
     - name: ubuntu
-      channel: "22.04"
+      channel: "24.04"
       architectures: [amd64, arm64]
     - name: ubuntu
-      channel: "20.04"
+      channel: "22.04"
       architectures: [amd64, arm64]

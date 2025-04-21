@@ -212,7 +212,8 @@ class CalicoCharm(ops.CharmBase):
         self.unit.status = BlockedStatus("Waiting for relation to etcd.")
 
     def _get_mtu(self) -> int:
-        """Get the user-specified MTU size, adjusted to make room for encapsulation headers.
+        """
+        Get the user-specified MTU size, adjusted to make room for encapsulation headers.
 
         This method retrieves the MTU size specified by the user in the charm configuration and adjusts
         it to make room for encapsulation headers. The adjustment is based on the tunneling protocol used
@@ -221,6 +222,7 @@ class CalicoCharm(ops.CharmBase):
 
         Returns:
             int: The adjusted MTU size, or None if the MTU size is not specified in the charm configuration.
+
         """
         mtu = self.config.get("veth-mtu")
         if not mtu:
@@ -576,20 +578,23 @@ class CalicoCharm(ops.CharmBase):
             self.stored.deployed = True
 
     def _get_arch(self) -> str:
-        """Retrieve the machine architecture as a string.
+        """
+        Retrieve the machine architecture as a string.
 
         This method uses the `dpkg` command to retrieve the machine architecture
         of the current system. The architecture is returned as a string.
 
         Returns:
             str: The machine architecture as a string.
+
         """
         architecture = subprocess.check_output(["dpkg", "--print-architecture"]).rstrip()
         architecture = architecture.decode("utf-8")
         return architecture
 
     def _get_network(self, cidr: str):
-        """Retrieve the network address from a given CIDR.
+        """
+        Retrieve the network address from a given CIDR.
 
         Args:
             cidr (str): The CIDR (Classless Inter-Domain Routing) notation specifying the IP address range.
@@ -599,11 +604,13 @@ class CalicoCharm(ops.CharmBase):
 
         Example:
             get_network('192.168.0.0/24') returns IPv4Network('192.168.0.0/24')
+
         """
         return ipaddress.ip_interface(address=cidr).network
 
     def _get_networks(self, cidrs: str):
-        """Retrieve a list of network addresses from a comma-separated string of CIDRs.
+        """
+        Retrieve a list of network addresses from a comma-separated string of CIDRs.
 
         Args:
             cidrs (str): A comma-separated string of CIDRs (Classless Inter-Domain Routing) specifying IP address ranges.
@@ -613,6 +620,7 @@ class CalicoCharm(ops.CharmBase):
 
         Example:
             get_networks('192.168.0.0/24,10.0.0.0/16') returns [IPv4Network('192.168.0.0/24'), IPv4Network('10.0.0.0/16')]
+
         """
         return [self._get_network(cidr) for cidr in cidrs.split(",")]
 
@@ -627,7 +635,8 @@ class CalicoCharm(ops.CharmBase):
         return False
 
     def calicoctl(self, *args, timeout: int = 60):
-        """Call calicoctl with specified args.
+        """
+        Call calicoctl with specified args.
 
         @param int timeout: If the process does not terminate after timeout seconds,
                             raise a TimeoutExpired exception

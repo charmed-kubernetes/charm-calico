@@ -7,6 +7,7 @@ from pathlib import Path
 
 import juju.application
 import pytest
+import pytest_asyncio
 import yaml
 
 log = logging.getLogger(__name__)
@@ -166,7 +167,7 @@ async def get_leader(app: juju.application.Application):
             return idx
 
 
-@pytest.fixture()
+@pytest_asyncio.fixture()
 async def ignore_loose_rp_filter(ops_test):
     calico_app: juju.application.Application = ops_test.model.applications["calico"]
     calico_leader = await get_leader(calico_app)
@@ -181,7 +182,8 @@ async def ignore_loose_rp_filter(ops_test):
         await juju_run(calico_app.units[calico_leader], cmd.format(v=1))
         await calico_app.set_config({"ignore-loose-rpf": "true"})
         await calico_app.set_config({"ignore-loose-rpf": "false"})
-        await ops_test.model.wait_for_idle(status="active", timeout=60 * 5)
+        async with ops_test.fast_forward():
+            await ops_test.model.wait_for_idle(status="active", timeout=60 * 5)
 
 
 async def test_rp_filter_conflict(ops_test, ignore_loose_rp_filter):

@@ -1,4 +1,7 @@
 # Testing tools configuration
+[project]
+requires-python = ">=3.10"
+
 [tool.coverage.run]
 branch = true
 
@@ -9,11 +12,6 @@ show_missing = true
 minversion = "6.0"
 log_cli_level = "INFO"
 
-# Formatting tools configuration
-[tool.black]
-line-length = 99
-target-version = ["py38"]
-
 # Linting tools configuration
 [tool.ruff]
 line-length = 99
@@ -21,19 +19,10 @@ extend-exclude = ["__pycache__", "*.egg_info"]
 lint.select = ["E", "W", "F", "C", "N", "D", "I001"]
 lint.extend-ignore = [
     "D203",
-    "D204",
-    "D213",
-    "D215",
-    "D400",
-    "D404",
-    "D406",
-    "D407",
-    "D408",
-    "D409",
-    "D413",
+    "D212",
 ]
 lint.ignore = ["E501", "D107"]
-lint.per-file-ignores = {"tests/*" = ["D100","D101","D102","D103","D104"]}
+lint.per-file-ignores = {"tests/*" = ["D100","D101","D103"]}
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10

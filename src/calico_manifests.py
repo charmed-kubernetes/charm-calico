@@ -1,4 +1,4 @@
-"""This module provides the CalicoManifests class for managing Calico manifests."""
+"""Provides the CalicoManifests class for managing Calico manifests."""
 
 import datetime
 import hashlib
@@ -23,7 +23,8 @@ MANIFEST_LABEL = "k8s-app"
 
 
 class PatchCDKOnCAChange(Patch):
-    """Patch Deployments/Daemonsets to be apart of cdk-restart-on-ca-change.
+    """
+    Patch Deployments/Daemonsets to be apart of cdk-restart-on-ca-change.
 
     * adding the config hash as an annotation
     * adding a cdk restart label
@@ -289,13 +290,15 @@ class SetEtcdSecrets(Patch):
             obj.data = values
 
     def _encode_base64(self, data: str) -> str:
-        """Encode data in Base64 format.
+        """
+        Encode data in Base64 format.
 
         Args:
             data (str): The data to encode.
 
         Returns:
             str: The encoded data in Base64 format.
+
         """
         if not data:
             return ""
@@ -303,7 +306,8 @@ class SetEtcdSecrets(Patch):
 
 
 class CalicoManifests(Manifests):
-    """A class representing Calico manifests.
+    """
+    A class representing Calico manifests.
 
     This class extends the Manifests class and provides functionality specific to Calico manifests.
 
@@ -320,16 +324,19 @@ class CalicoManifests(Manifests):
 
     Methods:
         config: Returns the configuration mapped from the charm config and joined relations.
+
     """
 
     def __init__(self, charm, charm_config, etcd: EtcdReactiveRequires, cni_config: dict):
-        """Initialize an instance of CalicoManifests.
+        """
+        Initialize an instance of CalicoManifests.
 
         Args:
             charm (CharmBase): The Calico charm object.
             charm_config (dict): The charm configuration.
             etcd (EtcdReactiveRequires): The Etcd relation object.
             cni_config (dict): The CNI (Container Network Interface) configuration.
+
         """
         manipulations = [
             ConfigRegistry(self),
@@ -353,10 +360,12 @@ class CalicoManifests(Manifests):
 
     @property
     def config(self) -> Dict:
-        """Return the configuration mapped from the charm config and joined relations.
+        """
+        Return the configuration mapped from the charm config and joined relations.
 
         Returns:
             dict: The merged configuration.
+
         """
         config = {}
         config.update({"connection_string": self.etcd.get_connection_string()})
@@ -374,10 +383,12 @@ class CalicoManifests(Manifests):
 
     @property
     def config_hash(self) -> str:
-        """Return the configuration SHA256 hash from the charm config.
+        """
+        Return the configuration SHA256 hash from the charm config.
 
         Returns:
             str: The SHA256 hash
+
         """
         json_str = json.dumps(self.config, sort_keys=True)
         hash = hashlib.sha256()
@@ -385,7 +396,8 @@ class CalicoManifests(Manifests):
         return hash.hexdigest()
 
     def status(self) -> FrozenSet[HashableResource]:
-        """Return all installed objects which have a `.status.conditions` attribute.
+        """
+        Return all installed objects which have a `.status.conditions` attribute.
 
         Bonus: Log events for daemonsets with unready pods.
         """
