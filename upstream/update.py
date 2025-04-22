@@ -37,7 +37,7 @@ SOURCES = dict(
         ],
         path="manifests",
         version_parser=VersionInfo.parse,
-        minimum="v3.25.1",
+        minimum="v3.29.3",
         maximum="v999.0.0",
         # alphanumerically order manifests by the original list order
         # because the operator.yaml must be read and deployed before the cr.yaml
