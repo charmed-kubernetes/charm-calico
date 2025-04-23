@@ -641,7 +641,9 @@ class CalicoCharm(ops.CharmBase):
         @param int timeout: If the process does not terminate after timeout seconds,
                             raise a TimeoutExpired exception
         """
-        cmd = ["/opt/calicoctl/calicoctl", "--log-level=debug"] + list(args)
+        cmd = ["/opt/calicoctl/calicoctl", "--log-level=debug", "--allow-version-mismatch"] + list(
+            args
+        )
         env = os.environ.copy()
         env.update(self._get_calicoctl_env())
         try:
