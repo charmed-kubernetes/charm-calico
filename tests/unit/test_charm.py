@@ -1056,7 +1056,11 @@ def test_calicoctl_get_raises(mock_calicoctl: mock.MagicMock, charm: CalicoCharm
 def test_calicoctl(mock_get: mock.MagicMock, mock_check: mock.MagicMock, charm: CalicoCharm):
     test_args = ("get", "version")
     mock_get.return_value = {"ETCD_KEY_FILE": "/tmp/test/path/key"}
-    expected_cmd = ["/opt/calicoctl/calicoctl", "--log-level=debug"] + list(test_args)
+    expected_cmd = [
+        "/opt/calicoctl/calicoctl",
+        "--log-level=debug",
+        "--allow-version-mismatch",
+    ] + list(test_args)
     expected_env = os.environ.copy()
     expected_env.update({"ETCD_KEY_FILE": "/tmp/test/path/key"})
 
