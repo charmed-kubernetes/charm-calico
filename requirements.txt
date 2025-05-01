@@ -1,4 +1,5 @@
 ops >= 2.2.0
 lightkube
 ops.manifest >= 1.1.0
-git+https://github.com/charmed-kubernetes/conctl@c1eaaac#egg=conctl
+conctl @ git+https://github.com/charmed-kubernetes/conctl@c1eaaac#egg=conctl
+setuptools == 79.0.1

@@ -212,7 +212,7 @@ actions:
         type: string
         default: ""
         description: |
-          Space separated list of kubernetes resource types to filter scrubbing   
+          Space separated list of kubernetes resource types to filter scrubbing
   sync-resources:
     description: |
       Add kubernetes resources which should be created by this charm which aren't
@@ -248,7 +248,6 @@ parts:
     plugin: charm
     source: .
     build-packages: [git]
-    charm-python-packages: [setuptools]
     prime:
       - upstream/**
       - scripts/**
