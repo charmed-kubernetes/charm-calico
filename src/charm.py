@@ -553,7 +553,7 @@ class CalicoCharm(ops.CharmBase):
 
     def _unpack_archive(self, path: Path, destination: Path):
         tar = tarfile.open(path)
-        tar.extractall(destination)
+        tar.extractall(destination, filter="data")  # safe: strips unsafe tar metadata
         tar.close()
 
     def _list_versions(self, event):
