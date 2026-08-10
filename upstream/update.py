@@ -26,7 +26,7 @@ logging.basicConfig(level=logging.INFO)
 GH_REPO = "https://github.com/{repo}"
 GH_TAGS = "https://api.github.com/repos/{repo}/tags"
 GH_RAW = "https://raw.githubusercontent.com/{repo}/{rel}/{path}/{manifest}"
-ROCKS_CC = "upload.rocks.canonical.com:5000/cdk"
+GHCR_CDK = "ghcr.io/canonical/cdk"
 
 SOURCES = dict(
     calico=dict(
@@ -284,7 +284,7 @@ def get_argparser():
     )
     parser.add_argument(
         "--registry",
-        default=ROCKS_CC,
+        default=GHCR_CDK,
         type=str,
         help="Registry to which images should be mirrored.\n\n"
         "example\n"

@@ -91,7 +91,7 @@ async def test_bgp_service_ip_advertisement(ops_test, kubernetes):
                     "containers": [
                         {
                             "name": "nginx",
-                            "image": "rocks.canonical.com/cdk/nginx:1.18",
+                            "image": "ghcr.io/canonical/cdk/nginx:1.18",
                             "ports": [{"containerPort": 80}],
                         }
                     ]
