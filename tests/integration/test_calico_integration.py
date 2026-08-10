@@ -3,7 +3,6 @@ import logging
 import os
 import shlex
 import time
-from pathlib import Path
 
 import juju.application
 import pytest
@@ -15,7 +14,7 @@ log = logging.getLogger(__name__)
 
 @pytest.mark.abort_on_fail
 @pytest.mark.skip_if_deployed
-async def test_build_and_deploy(ops_test, k8s_core_bundle, base):
+async def test_build_and_deploy(ops_test, k8s_core_bundle, base, series, charm_bundle_overlay):
     log.info("Building charm")
     calico_charm = await ops_test.build_charm(".")
 
@@ -33,9 +32,10 @@ async def test_build_and_deploy(ops_test, k8s_core_bundle, base):
     log.info("Build Bundle...")
     bundle, *overlays = await ops_test.async_render_bundles(
         k8s_core_bundle,
-        Path("tests/data/charm.yaml"),
+        charm_bundle_overlay,
         calico_charm=calico_charm,
         base=base,
+        series=series,
         resource_path=resource_path,
     )
 
