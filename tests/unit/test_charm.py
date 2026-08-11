@@ -13,6 +13,7 @@ from pathlib import Path
 from subprocess import CalledProcessError, CompletedProcess
 from typing import Optional, Set
 
+import httpx2
 import ops
 import ops.testing
 import pytest
@@ -234,6 +235,32 @@ def test_install_or_upgrade_exception(
         mock_configure.side_effect = side_effect
         charm._install_or_upgrade(mock_event)
         assert charm.unit.status == status
+        mock_event.defer.assert_called_once()
+        assert not charm.stored.deployed
+
+
+@mock.patch("charm.CalicoCharm._set_status")
+@mock.patch("charm.CalicoCharm._configure_calico")
+@mock.patch("charm.CalicoCharm._configure_cni")
+@mock.patch("charm.CalicoCharm._get_kubeconfig_status", return_value=True)
+def test_install_or_upgrade_defers_when_api_unreachable(
+    mock_kubeconfig: mock.MagicMock,
+    mock_cni: mock.MagicMock,
+    mock_configure: mock.MagicMock,
+    mock_set_status: mock.MagicMock,
+    charm: CalicoCharm,
+):
+    with (
+        mock.patch.object(charm, "etcd") as mock_etcd,
+        mock.patch.object(charm.calico_manifests, "apply_manifests") as mock_apply,
+    ):
+        mock_etcd.return_value.is_ready.return_value = True
+        mock_apply.side_effect = httpx2.ConnectError("Kubernetes API unavailable")
+        mock_event = mock.MagicMock()
+
+        charm._install_or_upgrade(mock_event)
+
+        assert charm.unit.status == WaitingStatus("Installing Calico manifests")
         mock_event.defer.assert_called_once()
         assert not charm.stored.deployed
 

@@ -15,6 +15,7 @@ from socket import gethostname
 from subprocess import CalledProcessError, TimeoutExpired
 from typing import Set
 
+import httpx2
 import ops
 import yaml
 from charms.kubernetes_libs.v0.etcd import EtcdReactiveRequires
@@ -91,7 +92,7 @@ class CalicoCharm(ops.CharmBase):
             try:
                 self._configure_cni()
                 self.calico_manifests.apply_manifests()
-            except ManifestClientError:
+            except (ManifestClientError, httpx2.ConnectError, httpx2.TimeoutException):
                 log.exception("Failed to update etcd secrets.")
                 event.defer()
 
@@ -103,7 +104,7 @@ class CalicoCharm(ops.CharmBase):
                 self._configure_calico()
                 self.calico_manifests.apply_manifests()
                 self._set_status()
-            except ManifestClientError:
+            except (ManifestClientError, httpx2.ConnectError, httpx2.TimeoutException):
                 self.unit.status = WaitingStatus("Waiting for Kubernetes API.")
                 log.exception("Failed to apply manifests, will retry.")
                 event.defer()
@@ -175,7 +176,7 @@ class CalicoCharm(ops.CharmBase):
                 self._configure_calico()
                 self.stored.deployed = True
                 self._set_status()
-            except ManifestClientError:
+            except (ManifestClientError, httpx2.ConnectError, httpx2.TimeoutException):
                 self.unit.status = WaitingStatus("Installing Calico manifests")
                 log.exception("Failed to install Calico manifests, will retry.")
                 event.defer()
