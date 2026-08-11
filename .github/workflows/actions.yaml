@@ -51,7 +51,9 @@ jobs:
             --model-default primary-network=VLAN_2763
             --model-default force-vm-hardware-version=17
       - name: Run test
-        run: tox -e integration -- --basetemp=/home/ubuntu/pytest
+        # Pin the machine base: the "bird" test charm has no ubuntu@24.04 release yet,
+        # but kubernetes-core's edge channel currently defaults to noble.
+        run: tox -e integration -- --basetemp=/home/ubuntu/pytest --default-base=ubuntu@22.04
       - name: Setup Debug Artifact Collection
         if: ${{ failure() }}
         run: mkdir tmp
