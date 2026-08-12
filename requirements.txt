@@ -4,4 +4,4 @@ ops.manifest >= 1.1.0
 conctl @ git+https://github.com/charmed-kubernetes/conctl@c1eaaac#egg=conctl
 httpx
 httpx2
-setuptools == 79.0.1
+setuptools == 83.0.0
