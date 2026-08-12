@@ -53,7 +53,7 @@ config:
         This is incompatible with VXLAN encapsulation. If VXLAN encapsulation is
         enabled, then this must be set to "Never".
     image-registry:
-      default: rocks.canonical.com:443/cdk
+      default: ghcr.io/canonical/cdk
       type: string
       description: |
         Source registry of Calico images.
