@@ -1035,7 +1035,7 @@ def test_unpack_archive(mock_tarfile_open: mock.MagicMock, charm: CalicoCharm):
 
     charm._unpack_archive(source_path, dst_path)
     mock_tarfile_open.assert_called_once_with(source_path)
-    mock_tarfile_open().extractall.assert_called_once_with(dst_path)
+    mock_tarfile_open().extractall.assert_called_once_with(dst_path, filter="data")
 
 
 @mock.patch("charm.CalicoCharm.calicoctl")
