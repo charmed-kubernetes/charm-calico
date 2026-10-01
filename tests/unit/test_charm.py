@@ -22,9 +22,21 @@ from ops.model import ActiveStatus, BlockedStatus, ModelError, WaitingStatus
 from ops.testing import Harness
 from yaml import YAMLError
 
+from calico_manifests import collect_events
 from charm import CalicoCharm
 
 ops.testing.SIMULATE_CAN_CONNECT = True
+
+
+def bad_gateway() -> httpx2.HTTPStatusError:
+    """Non-JSON 502 from the API load balancer, as lightkube 1.x raises it unwrapped."""
+    request = httpx2.Request(
+        "GET", "https://10.0.0.1:6443/apis/apiextensions.k8s.io/v1/customresourcedefinitions"
+    )
+    response = httpx2.Response(502, request=request, headers={"Content-Type": "text/html"})
+    return httpx2.HTTPStatusError(
+        "Server error '502 Bad Gateway'", request=request, response=response
+    )
 
 
 class NetworkMock:
@@ -239,6 +251,13 @@ def test_install_or_upgrade_exception(
         assert not charm.stored.deployed
 
 
+@pytest.mark.parametrize(
+    "error",
+    [
+        pytest.param(httpx2.ConnectError("Kubernetes API unavailable"), id="connect error"),
+        pytest.param(bad_gateway(), id="502 from load balancer"),
+    ],
+)
 @mock.patch("charm.CalicoCharm._set_status")
 @mock.patch("charm.CalicoCharm._configure_calico")
 @mock.patch("charm.CalicoCharm._configure_cni")
@@ -249,13 +268,14 @@ def test_install_or_upgrade_defers_when_api_unreachable(
     mock_configure: mock.MagicMock,
     mock_set_status: mock.MagicMock,
     charm: CalicoCharm,
+    error: Exception,
 ):
     with (
         mock.patch.object(charm, "etcd") as mock_etcd,
         mock.patch.object(charm.calico_manifests, "apply_manifests") as mock_apply,
     ):
         mock_etcd.return_value.is_ready.return_value = True
-        mock_apply.side_effect = httpx2.ConnectError("Kubernetes API unavailable")
+        mock_apply.side_effect = error
         mock_event = mock.MagicMock()
 
         charm._install_or_upgrade(mock_event)
@@ -1111,8 +1131,19 @@ def test_calicoctl_raises(
         charm.calicoctl(*test_args)
 
 
-@mock.patch("charm.CalicoCharm._set_status")
-def test_on_update_status(mock_set: mock.MagicMock, charm: CalicoCharm):
-    mock_event = mock.MagicMock()
-    charm._on_update_status(mock_event)
-    mock_set.assert_called_once()
+@mock.patch("charm.CalicoCharm._is_rpf_config_mismatched", return_value=False)
+def test_on_update_status_waits_when_api_unavailable(mock_rpf: mock.MagicMock, charm: CalicoCharm):
+    """A transient API error during update-status must not fail the hook."""
+    charm.stored.deployed = True
+    with mock.patch.object(
+        type(charm.collector), "unready", new_callable=mock.PropertyMock, side_effect=bad_gateway()
+    ):
+        charm._on_update_status(mock.MagicMock())
+    assert charm.unit.status == WaitingStatus("Waiting for Kubernetes API.")
+
+
+def test_collect_events_tolerates_api_errors():
+    client = mock.MagicMock()
+    client.list.side_effect = bad_gateway()
+    resource = mock.MagicMock(kind="DaemonSet")
+    assert collect_events(client, resource) == []
