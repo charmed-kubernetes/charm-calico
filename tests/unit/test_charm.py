@@ -13,7 +13,7 @@ from pathlib import Path
 from subprocess import CalledProcessError, CompletedProcess
 from typing import Optional, Set
 
-import httpx2
+import httpx
 import ops
 import ops.testing
 import pytest
@@ -28,13 +28,13 @@ from charm import CalicoCharm
 ops.testing.SIMULATE_CAN_CONNECT = True
 
 
-def bad_gateway() -> httpx2.HTTPStatusError:
-    """Non-JSON 502 from the API load balancer, as lightkube 1.x raises it unwrapped."""
-    request = httpx2.Request(
+def bad_gateway() -> httpx.HTTPStatusError:
+    """Non-JSON 502 from the API load balancer, which lightkube raises unwrapped."""
+    request = httpx.Request(
         "GET", "https://10.0.0.1:6443/apis/apiextensions.k8s.io/v1/customresourcedefinitions"
     )
-    response = httpx2.Response(502, request=request, headers={"Content-Type": "text/html"})
-    return httpx2.HTTPStatusError(
+    response = httpx.Response(502, request=request, headers={"Content-Type": "text/html"})
+    return httpx.HTTPStatusError(
         "Server error '502 Bad Gateway'", request=request, response=response
     )
 
@@ -254,7 +254,7 @@ def test_install_or_upgrade_exception(
 @pytest.mark.parametrize(
     "error",
     [
-        pytest.param(httpx2.ConnectError("Kubernetes API unavailable"), id="connect error"),
+        pytest.param(httpx.ConnectError("Kubernetes API unavailable"), id="connect error"),
         pytest.param(bad_gateway(), id="502 from load balancer"),
     ],
 )

@@ -8,7 +8,7 @@ from base64 import b64encode
 from typing import Dict, FrozenSet, Iterable, List, Optional
 
 from charms.kubernetes_libs.v0.etcd import EtcdReactiveRequires
-from httpx2 import HTTPError
+from httpx import HTTPError
 from lightkube.codecs import AnyResource
 from lightkube.core.client import Client
 from lightkube.core.exceptions import ApiError

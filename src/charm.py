@@ -15,7 +15,7 @@ from socket import gethostname
 from subprocess import CalledProcessError, TimeoutExpired
 from typing import Set
 
-import httpx2
+import httpx
 import ops
 import yaml
 from charms.kubernetes_libs.v0.etcd import EtcdReactiveRequires
@@ -37,10 +37,10 @@ ETCD_KEY_PATH = os.path.join(CALICO_CTL_PATH, "etcd-key")
 ETCD_CERT_PATH = os.path.join(CALICO_CTL_PATH, "etcd-cert")
 ETCD_CA_PATH = os.path.join(CALICO_CTL_PATH, "etcd-ca")
 
-# lightkube 1.x raises httpx2 errors; ops.manifest only wraps httpx errors, so non-JSON
-# API responses (e.g. a 502 from the load balancer while the API restarts) escape as
-# httpx2.HTTPStatusError. httpx2.HTTPError covers those, connect errors, and timeouts.
-KUBE_API_ERRORS = (ManifestClientError, httpx2.HTTPError)
+# Kubernetes API failures surface as ManifestClientError (wrapped by ops.manifest) or as
+# raw httpx errors: connect errors, timeouts, and non-JSON responses such as a 502 from
+# the API load balancer while the API restarts.
+KUBE_API_ERRORS = (ManifestClientError, httpx.HTTPError)
 
 
 def conctl_stop(container):
