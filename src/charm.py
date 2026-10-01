@@ -15,7 +15,7 @@ from socket import gethostname
 from subprocess import CalledProcessError, TimeoutExpired
 from typing import Set
 
-import httpx2
+import httpx
 import ops
 import yaml
 from charms.kubernetes_libs.v0.etcd import EtcdReactiveRequires
@@ -36,6 +36,11 @@ CALICO_CNI_CONFIG_PATH = "/etc/cni/net.d/10-calico.conflist"
 ETCD_KEY_PATH = os.path.join(CALICO_CTL_PATH, "etcd-key")
 ETCD_CERT_PATH = os.path.join(CALICO_CTL_PATH, "etcd-cert")
 ETCD_CA_PATH = os.path.join(CALICO_CTL_PATH, "etcd-ca")
+
+# Kubernetes API failures surface as ManifestClientError (wrapped by ops.manifest) or as
+# raw httpx errors: connect errors, timeouts, and non-JSON responses such as a 502 from
+# the API load balancer while the API restarts.
+KUBE_API_ERRORS = (ManifestClientError, httpx.HTTPError)
 
 
 def conctl_stop(container):
@@ -92,7 +97,7 @@ class CalicoCharm(ops.CharmBase):
             try:
                 self._configure_cni()
                 self.calico_manifests.apply_manifests()
-            except (ManifestClientError, httpx2.ConnectError, httpx2.TimeoutException):
+            except KUBE_API_ERRORS:
                 log.exception("Failed to update etcd secrets.")
                 event.defer()
 
@@ -104,7 +109,7 @@ class CalicoCharm(ops.CharmBase):
                 self._configure_calico()
                 self.calico_manifests.apply_manifests()
                 self._set_status()
-            except (ManifestClientError, httpx2.ConnectError, httpx2.TimeoutException):
+            except KUBE_API_ERRORS:
                 self.unit.status = WaitingStatus("Waiting for Kubernetes API.")
                 log.exception("Failed to apply manifests, will retry.")
                 event.defer()
@@ -176,7 +181,7 @@ class CalicoCharm(ops.CharmBase):
                 self._configure_calico()
                 self.stored.deployed = True
                 self._set_status()
-            except (ManifestClientError, httpx2.ConnectError, httpx2.TimeoutException):
+            except KUBE_API_ERRORS:
                 self.unit.status = WaitingStatus("Installing Calico manifests")
                 log.exception("Failed to install Calico manifests, will retry.")
                 event.defer()
@@ -492,7 +497,11 @@ class CalicoCharm(ops.CharmBase):
             raise e
 
     def _on_update_status(self, _):
-        self._set_status()
+        try:
+            self._set_status()
+        except KUBE_API_ERRORS:
+            self.unit.status = WaitingStatus("Waiting for Kubernetes API.")
+            log.exception("Failed to read Calico status, will retry on next update-status.")
 
     def _install_calico_binaries(self):
         arch = self._get_arch()
