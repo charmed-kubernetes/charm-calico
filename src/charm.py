@@ -94,6 +94,11 @@ class CalicoCharm(ops.CharmBase):
         self.etcd.save_client_credentials(ETCD_CA_PATH, ETCD_CERT_PATH, ETCD_KEY_PATH)
         self.unit.status = MaintenanceStatus("Updating etcd configuration.")
         if self.stored.deployed:
+            if not self.etcd.is_ready:
+                self.unit.status = WaitingStatus("Waiting for etcd.")
+                log.info("etcd is not ready, skipping manifest apply, will retry.")
+                event.defer()
+                return
             try:
                 self._configure_cni()
                 self.calico_manifests.apply_manifests()
@@ -104,6 +109,11 @@ class CalicoCharm(ops.CharmBase):
     def _on_config_changed(self, event):
         self.unit.status = MaintenanceStatus("Reconfiguring Calico.")
         if self.stored.deployed:
+            if not self.etcd.is_ready:
+                self.unit.status = WaitingStatus("Waiting for etcd.")
+                log.info("etcd is not ready, skipping manifest apply, will retry.")
+                event.defer()
+                return
             try:
                 self._configure_cni()
                 self._configure_calico()

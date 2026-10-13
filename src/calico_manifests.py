@@ -250,6 +250,9 @@ class SetEtcdEndpoints(Patch):
         log.info("Patching Calico etcd connection string.")
 
         uri = self.manifests.etcd.get_connection_string()
+        if not uri:
+            log.warning("calico-config: Unable to patch etcd endpoints, connection string not found.")
+            return
         data = obj.data
         if not data:
             log.warning("calico-config: Unable to patch etcd endpoints, data not found.")

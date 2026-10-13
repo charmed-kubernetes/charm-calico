@@ -22,7 +22,7 @@ from ops.model import ActiveStatus, BlockedStatus, ModelError, WaitingStatus
 from ops.testing import Harness
 from yaml import YAMLError
 
-from calico_manifests import collect_events
+from calico_manifests import SetEtcdEndpoints, collect_events
 from charm import CalicoCharm
 
 ops.testing.SIMULATE_CAN_CONNECT = True
@@ -55,7 +55,11 @@ class NetworkMock:
 def test_on_etcd_changed(
     harness: Harness, charm: CalicoCharm, caplog, deployed: bool, side_effect: Exception
 ):
-    with mock.patch.object(charm.calico_manifests, "apply_manifests") as mock_apply:
+    with (
+        mock.patch.object(charm.calico_manifests, "apply_manifests") as mock_apply,
+        mock.patch.object(charm, "etcd") as mock_etcd,
+    ):
+        mock_etcd.is_ready = True
         mock_event = mock.MagicMock()
         mock_apply.side_effect = side_effect
         charm.stored.deployed = deployed
@@ -67,6 +71,20 @@ def test_on_etcd_changed(
             mock_apply.assert_called_once()
         else:
             mock_apply.assert_not_called()
+
+
+def test_on_etcd_changed_defers_when_etcd_not_ready(charm: CalicoCharm, caplog):
+    with (
+        mock.patch.object(charm.calico_manifests, "apply_manifests") as mock_apply,
+        mock.patch.object(charm, "etcd") as mock_etcd,
+    ):
+        mock_etcd.is_ready = False
+        mock_event = mock.MagicMock()
+        charm.stored.deployed = True
+        charm._on_etcd_changed(mock_event)
+        mock_apply.assert_not_called()
+        mock_event.defer.assert_called_once()
+        assert charm.unit.status == WaitingStatus("Waiting for etcd.")
 
 
 @pytest.mark.parametrize(
@@ -91,7 +109,9 @@ def test_on_config_changed(
         charm.stored.deployed = deployed
         mock_event = mock.MagicMock()
         mock_configure.side_effect = side_effect
-        charm._on_config_changed(mock_event)
+        with mock.patch.object(charm, "etcd") as mock_etcd:
+            mock_etcd.is_ready = True
+            charm._on_config_changed(mock_event)
         if deployed:
             if side_effect:
                 if isinstance(side_effect, CalledProcessError):
@@ -103,6 +123,25 @@ def test_on_config_changed(
             mock_configure.assert_called_once()
         else:
             mock_configure.assert_not_called()
+
+
+@mock.patch("charm.CalicoCharm._configure_calico")
+def test_on_config_changed_defers_when_etcd_not_ready(
+    mock_configure: mock.MagicMock, harness: Harness, charm: CalicoCharm
+):
+    with (
+        mock.patch.object(charm.calico_manifests, "apply_manifests") as mock_apply,
+        mock.patch.object(charm, "etcd") as mock_etcd,
+    ):
+        harness.disable_hooks()
+        mock_etcd.is_ready = False
+        mock_event = mock.MagicMock()
+        charm.stored.deployed = True
+        charm._on_config_changed(mock_event)
+        mock_configure.assert_not_called()
+        mock_apply.assert_not_called()
+        mock_event.defer.assert_called_once()
+        assert charm.unit.status == WaitingStatus("Waiting for etcd.")
 
 
 @mock.patch("charm.CalicoCharm._configure_calico_pool")
@@ -1147,3 +1186,26 @@ def test_collect_events_tolerates_api_errors():
     client.list.side_effect = bad_gateway()
     resource = mock.MagicMock(kind="DaemonSet")
     assert collect_events(client, resource) == []
+
+
+def test_set_etcd_endpoints_skips_blank_connection_string(charm: CalicoCharm):
+    """A blank etcd connection string must not overwrite a good etcd_endpoints value."""
+    obj = mock.MagicMock()
+    obj.kind = "ConfigMap"
+    obj.metadata.name = "calico-config"
+    obj.data = {"etcd_endpoints": "https://10.0.0.5:2379"}
+    with mock.patch.object(charm.calico_manifests.etcd, "get_connection_string", return_value=""):
+        SetEtcdEndpoints(charm.calico_manifests)(obj)
+    assert obj.data["etcd_endpoints"] == "https://10.0.0.5:2379"
+
+
+def test_set_etcd_endpoints_patches_when_available(charm: CalicoCharm):
+    obj = mock.MagicMock()
+    obj.kind = "ConfigMap"
+    obj.metadata.name = "calico-config"
+    obj.data = {"etcd_endpoints": "https://old:2379"}
+    with mock.patch.object(
+        charm.calico_manifests.etcd, "get_connection_string", return_value="https://new:2379"
+    ):
+        SetEtcdEndpoints(charm.calico_manifests)(obj)
+    assert obj.data["etcd_endpoints"] == "https://new:2379"
