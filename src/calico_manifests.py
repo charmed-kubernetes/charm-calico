@@ -163,6 +163,8 @@ class PatchCalicoConflist(Patch):
             # QoS, which does not enforce the kubernetes.io/*-bandwidth pod
             # annotations with the etcd datastore. Kubernetes nodes install the
             # plugin binary into /opt/cni/bin from their cni-plugins resource.
+            # Only the egress limit is kept: Felix 3.30+ deletes the plugin's
+            # ingress TBF qdisc when the endpoint has no native QoS controls.
             log.info("Adding the bandwidth plugin to the Calico Conflist.")
             plugins.append({"type": "bandwidth", "capabilities": {"bandwidth": True}})
 
