@@ -193,6 +193,7 @@ config:
     release:
       description: Version of Calico to deploy
       type: string
+      default: v3.32.4
 
 actions:
   list-versions:
