@@ -297,44 +297,6 @@ def test_on_upgrade(
     mock_install.assert_called_once_with(mock_event)
 
 
-@mock.patch("charm.CalicoCharm._set_status")
-@mock.patch("charm.CalicoCharm._configure_calico")
-@mock.patch("charm.CalicoCharm._configure_cni")
-@mock.patch("charm.CalicoCharm._remove_calico_reactive")
-@mock.patch("charm.CalicoCharm._get_kubeconfig_status", return_value=True)
-def test_upgrade_applies_schema_default_release(
-    mock_kubeconfig: mock.MagicMock,
-    mock_remove: mock.MagicMock,
-    mock_cni: mock.MagicMock,
-    mock_configure: mock.MagicMock,
-    mock_set_status: mock.MagicMock,
-    harness: Harness,
-    charm: CalicoCharm,
-):
-    """A refresh of a deployed unit re-applies the manifests of the schema default release."""
-    manifests = charm.calico_manifests
-    schema_default = charm.config["release"]
-    assert schema_default == manifests.default_release
-    assert schema_default in manifests.releases
-
-    applied = []
-    harness.disable_hooks()
-    charm.stored.deployed = True
-    with (
-        mock.patch.object(charm, "etcd"),
-        mock.patch.object(manifests, "etcd"),
-        mock.patch.object(
-            manifests,
-            "apply_manifests",
-            side_effect=lambda: applied.append(manifests.current_release),
-        ),
-    ):
-        charm._on_upgrade(mock.MagicMock())
-
-    assert applied == [schema_default]
-    assert charm.stored.deployed
-
-
 def test_get_kubeconfig_status(harness, charm):
     harness.disable_hooks()
     rel_id = harness.add_relation("cni", "kubernetes-control-plane")

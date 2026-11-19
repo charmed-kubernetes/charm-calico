@@ -46,10 +46,8 @@ jobs:
           clouds-yaml: ${{ secrets.CLOUDS_YAML }}
           bootstrap-constraints: "arch=amd64 cores=2 mem=4G"
           bootstrap-options: >-
-            ${{ secrets.JAMMY_BOOTSTRAP_OPTIONS }}
-            --model-default datastore=vsanDatastore
-            --model-default primary-network=VLAN_2763
-            --model-default force-vm-hardware-version=17
+            ${{ vars.VSPHERE_BOOTSTRAP_NOBLE }}
+            ${{ vars.VSPHERE_BOOTSTRAP_VLAN_2763 }}
       - name: Run test
         # Pin the machine base: the "bird" test charm has no ubuntu@24.04 release yet,
         # but kubernetes-core's edge channel currently defaults to noble.
