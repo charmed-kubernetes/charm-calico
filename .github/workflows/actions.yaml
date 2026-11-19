@@ -45,6 +45,8 @@ jobs:
           credentials-yaml: ${{ secrets.CREDENTIALS_YAML }}
           clouds-yaml: ${{ secrets.CLOUDS_YAML }}
           bootstrap-constraints: "arch=amd64 cores=2 mem=4G"
+          # Machines are deployed on jammy (--default-base below), and vSphere can only
+          # provision the base the controller was bootstrapped with.
           bootstrap-options: >-
             ${{ secrets.JAMMY_BOOTSTRAP_OPTIONS }}
             --model-default datastore=vsanDatastore

@@ -151,11 +151,22 @@ class PatchCalicoConflist(Patch):
 
         conflist = json.loads(json_config)
 
-        for plugin in conflist.get("plugins"):
+        plugins = conflist.get("plugins")
+        for plugin in plugins:
             if plugin.get("type") == "calico":
                 ipam = plugin["ipam"]
                 ipam["assign_ipv4"] = self.manifests.config.get("assign_ipv4")
                 ipam["assign_ipv6"] = self.manifests.config.get("assign_ipv6")
+
+        if not any(plugin.get("type") == "bandwidth" for plugin in plugins):
+            # Calico 3.30+ manifests drop the bandwidth plugin in favour of native
+            # QoS, which does not enforce the kubernetes.io/*-bandwidth pod
+            # annotations with the etcd datastore. Kubernetes nodes install the
+            # plugin binary into /opt/cni/bin from their cni-plugins resource.
+            # Only the egress limit is kept: Felix 3.30+ deletes the plugin's
+            # ingress TBF qdisc when the endpoint has no native QoS controls.
+            log.info("Adding the bandwidth plugin to the Calico Conflist.")
+            plugins.append({"type": "bandwidth", "capabilities": {"bandwidth": True}})
 
         json_config = json.dumps(conflist)
         json_config = json_config.replace('"__CNI_MTU__"', "__CNI_MTU__")
